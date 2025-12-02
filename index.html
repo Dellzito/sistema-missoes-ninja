@@ -253,10 +253,66 @@
 
             modal.classList.remove('hidden');
         }
+        
+        // Helper function to calculate total points, rank, and gather all data
+        function _gatherReportData() {
+            const container = document.getElementById('missions-entry-container');
+            if (!container) return null;
 
-        
-        // --- FUNÇÕES DE LÓGICA DO FORMULÁRIO (População de Selects, Pontos e Preview) ---
-        
+            let totalPointsRaw = 0;
+            let highestRank = '';
+            const serviceNames = [];
+            
+            const getRankIndex = (rankClean) => {
+                 return RANK_ORDER.findIndex(prefix => rankClean.startsWith(prefix));
+            };
+
+            const missionSelects = container.querySelectorAll('.mission-select');
+            missionSelects.forEach(select => {
+                const selectedOption = select.options[select.selectedIndex];
+                if (selectedOption && selectedOption.value) {
+                    const points = parseInt(selectedOption.getAttribute('data-points') || '0', 10);
+                    const rank = selectedOption.getAttribute('data-rank');
+                    const cleanRank = cleanRankForLookup(rank);
+
+                    totalPointsRaw += points;
+                    serviceNames.push(selectedOption.value);
+                    
+                    // Determine highest rank
+                    const currentRankClean = cleanRankForLookup(rank);
+                    const highestRankClean = cleanRankForLookup(highestRank);
+                    const currentIndex = getRankIndex(currentRankClean);
+                    const highestIndex = getRankIndex(highestRankClean);
+                    
+                    if (highestIndex === -1 || currentIndex < highestIndex) {
+                        highestRank = rank;
+                    }
+                }
+            });
+
+            const clientsInput = document.getElementById('clients');
+            const supportInput = document.getElementById('support-ids');
+            const missionDetailsInput = document.getElementById('mission-details');
+            const previewDiv = document.getElementById('description-preview');
+            
+            const clients = clientsInput ? clientsInput.value.split(',').map(c => c.trim()).filter(c => c) : [];
+            const supportIdsRaw = supportInput ? supportInput.value.split(',').map(id => normalizeId(id)).filter(id => id) : [];
+            const description = previewDiv ? previewDiv.textContent : '';
+
+            return {
+                reportId: currentReportId,
+                serviceNames: serviceNames,
+                finalReportRank: highestRank || 'N/A',
+                clients: clients,
+                executorIds: selectedExecutors,
+                supportIds: supportIdsRaw,
+                description: description,
+                totalPointsRaw: totalPointsRaw,
+                timestamp: new Date().toISOString()
+            };
+        }
+
+
         // Implementação: Gera o ID Único do Relatório
         window.generateReportId = function() {
             const reportIdElement = document.getElementById('report-id-display');
@@ -273,30 +329,18 @@
 
         // Implementação: Calcula o total de pontos e habilita o botão de submit
         window.calculateTotalPoints = function() {
-            const container = document.getElementById('missions-entry-container');
+            const data = _gatherReportData();
             const totalPointsInput = document.getElementById('total-points');
             const submitBtn = document.getElementById('submit-report');
-            if (!container || !totalPointsInput || !submitBtn) return;
 
-            let totalPoints = 0;
-            let missionCount = 0;
-
-            // Iterar sobre todos os selects de missão e somar os pontos dos selecionados
-            const missionSelects = container.querySelectorAll('.mission-select');
-            missionSelects.forEach(select => {
-                const selectedOption = select.options[select.selectedIndex];
-                if (selectedOption && selectedOption.value) {
-                    // Busca os pontos no atributo data-points da opção selecionada
-                    const points = parseInt(selectedOption.getAttribute('data-points') || '0', 10);
-                    totalPoints += points;
-                    missionCount++;
-                }
-            });
-
+            if (!data || !totalPointsInput || !submitBtn) return;
+            
+            const totalPoints = data.totalPointsRaw;
+            const missionCount = data.serviceNames.length;
             totalPointsInput.value = totalPoints;
 
             // Habilita o botão de submissão se houver pelo menos 1 executor e 1 missão que pontua
-            const hasExecutors = selectedExecutors.length > 0;
+            const hasExecutors = data.executorIds.length > 0;
             const isReady = isWriterMode && hasExecutors && missionCount > 0 && totalPoints > 0; 
             submitBtn.disabled = !isReady;
             
@@ -318,18 +362,15 @@
             
             if (!previewDiv || !detailsInput || !clientsInput || !supportInput) return;
 
+            const data = _gatherReportData();
+            
             const details = detailsInput.value.trim();
             const clients = clientsInput.value.trim();
-            const support = supportInput.value.trim();
-            
-            const missionNames = Array.from(document.querySelectorAll('#missions-entry-container .mission-select'))
-                                    .map(select => select.value)
-                                    .filter(name => name);
             
             let previewText = '';
 
-            if (missionNames.length > 0) {
-                previewText += `Missões Concluídas: ${missionNames.join(', ')}. `;
+            if (data.serviceNames.length > 0) {
+                previewText += `Missões Concluídas: ${data.serviceNames.join(', ')}. `;
             } else {
                 previewText += `[Nenhuma missão selecionada]. `;
             }
@@ -342,12 +383,12 @@
                 previewText += `Cliente(s): ${clients}. `;
             }
 
-            if (support) {
-                previewText += `Auxílio: ${support}. `;
+            if (data.supportIds.length > 0) {
+                previewText += `Auxílio: ${data.supportIds.join(', ')}. `;
             }
 
-            if (selectedExecutors.length > 0) {
-                previewText += `Executor(es): ${selectedExecutors.join(', ')}. `;
+            if (data.executorIds.length > 0) {
+                previewText += `Executor(es): ${data.executorIds.join(', ')}. `;
             } else {
                  previewText += `[Nenhum executor selecionado]. `;
             }
@@ -358,41 +399,92 @@
             window.calculateTotalPoints();
         }
 
-        // Implementação: Submete o formulário (simulação)
-        window.submitReport = function() {
-            const totalPointsInput = document.getElementById('total-points');
-            const reportIdElement = document.getElementById('report-id-display');
-            const previewDiv = document.getElementById('description-preview');
-            
-            if (totalPointsInput.value === '0' || selectedExecutors.length === 0) {
-                 window.showCustomModal('Erro', 'O relatório deve ter pelo menos uma missão que pontua e um executor para ser registrado.', false);
+        // Implementação: Submete o formulário (REAL FIREBASE WRITE)
+        window.submitReport = async function() {
+            if (!isWriterMode) {
+                 window.showCustomModal('Acesso Negado', 'Você precisa de permissão de Escritor ou Admin para registrar relatórios.', false);
                  return;
             }
-            
-            const reportSummary = `
-                ID: ${reportIdElement.value}
-                Executores: ${selectedExecutors.join(', ')}
-                Total de Pontos: ${totalPointsInput.value}
-                Descrição: ${previewDiv.textContent}
-                ---
-                Pronto para simular o envio para o Firebase! (Lógica de pontuação e registro precisa ser implementada aqui)
-            `;
-            
-            // Aqui seria o local para chamar a função de escrita do Firebase (addDoc / setDoc)
-            // await addDoc(collection(db, COLLECTIONS.REPORTS), reportObject);
-            
-            window.showCustomModal('Registro Simulado (SUCESSO)', reportSummary, false);
-            
-            // Resetar o formulário para simular a conclusão
-            selectedExecutors = [];
-            window.updateExecutorTags();
-            document.getElementById('missions-entry-container').innerHTML = ''; // Limpa as entradas de missão
-            window.addMissionEntry(null, false); // Adiciona a primeira linha vazia novamente
-            window.generateReportId();
-            document.getElementById('clients').value = '';
-            document.getElementById('support-ids').value = '';
-            document.getElementById('mission-details').value = '';
-            window.updateDescriptionPreview(); 
+
+            const data = _gatherReportData();
+            const statusElement = document.getElementById('status');
+
+            if (!data || data.executorIds.length === 0 || data.totalPointsRaw === 0) {
+                 window.showCustomModal('Erro', 'O relatório deve ter pelo menos uma missão que pontua e um executor selecionado.', false);
+                 return;
+            }
+
+            // Validação de campos obrigatórios (além de executor/pontos)
+             if (data.serviceNames.length === 0 || data.clients.length === 0 || !document.getElementById('mission-details').value.trim()) {
+                statusElement.textContent = '❌ Erro: Preencha todos os campos obrigatórios (Missões, Clientes e Detalhes da Missão).';
+                statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                setTimeout(() => statusElement.classList.add('hidden'), 7000);
+                return;
+            }
+
+            statusElement.classList.remove('hidden');
+            statusElement.className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
+            statusElement.textContent = `Registrando Relatório ${data.reportId} e atualizando Rank...`;
+
+            const batch = writeBatch(db);
+            const pointsToAward = data.totalPointsRaw;
+            const missionsCount = data.serviceNames.length;
+            const currentTime = data.timestamp;
+
+            try {
+                // 1. Set/Add Report
+                const reportRef = doc(db, COLLECTIONS.REPORTS, data.reportId);
+                batch.set(reportRef, data);
+
+                // 2. Update Executors (NINJAS collection)
+                for (const executorId of data.executorIds) {
+                    const ninjaRef = doc(db, COLLECTIONS.NINJAS, executorId);
+                    
+                    // Usa o cache local para a leitura, garantindo que o valor seja o mais recente conhecido.
+                    batch.set(ninjaRef, { 
+                        rankPoints: (ninjasData[executorId]?.rankPoints || 0) + pointsToAward,
+                        missionsCompleted: (ninjasData[executorId]?.missionsCompleted || 0) + missionsCount,
+                    }, { merge: true });
+                }
+
+                // 3. Update Auxiliary Log (AUXILIARY_LOG collection)
+                for (const supportId of data.supportIds) {
+                    // Ignora se o auxiliar for também um executor (já pontuou como ninja)
+                    if (data.executorIds.includes(supportId)) continue; 
+                    
+                    const auxRef = doc(db, COLLECTIONS.AUXILIARY_LOG, supportId);
+                    // Usa o cache local para a leitura.
+                    batch.set(auxRef, {
+                        id: supportId,
+                        rankPoints: (auxiliaryData[supportId]?.rankPoints || 0) + pointsToAward,
+                        lastParticipation: currentTime
+                    }, { merge: true });
+                }
+                
+                // Commit the batch operation
+                await batch.commit();
+
+                // SUCCESS HANDLING & RESET
+                statusElement.textContent = `✅ Sucesso! Relatório ${data.reportId} registrado. ${pointsToAward} pontos aplicados.`;
+                statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
+                
+                // Reset Form UI
+                selectedExecutors = [];
+                window.updateExecutorTags();
+                document.getElementById('missions-entry-container').innerHTML = '';
+                window.addMissionEntry(null, false);
+                window.generateReportId();
+                document.getElementById('clients').value = '';
+                document.getElementById('support-ids').value = '';
+                document.getElementById('mission-details').value = '';
+                window.updateDescriptionPreview(); // Final reset to default state
+
+            } catch (e) {
+                console.error("Erro no registro do Firebase Batch:", e);
+                statusElement.textContent = `❌ Erro no Registro: ${e.message}. Verifique permissões de escrita/internet.`;
+                statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+            }
+            setTimeout(() => statusElement.classList.add('hidden'), 7000);
         }
 
         window.updateExecutorSelect = function() {
