@@ -7,7 +7,7 @@
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Inter Font -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #0f172a; }
         ::-webkit-scrollbar { width: 8px; }
@@ -62,7 +62,7 @@
         
         <!-- HEADER e NAVEGAÇÃO -->
         <header class="pb-4 border-b border-blue-700/50">
-            <!-- ALTERAÇÃO 1: Título principal do sistema -->
+            <!-- Título principal do sistema -->
             <h1 id="main-title" class="text-4xl font-bold text-blue-400 text-center mb-4">📜 Sistema de Registro de Missões — 12 Guardiões da Folha</h1>
             <!-- Reorganização dos links de navegação -->
             <nav class="flex justify-center bg-gray-900 rounded-xl shadow-lg p-1">
@@ -116,7 +116,7 @@
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, doc, setDoc, onSnapshot, collection, writeBatch, 
-            updateDoc, getDoc, deleteDoc, setLogLevel
+            updateDoc, getDoc, deleteDoc, getDocs, setLogLevel // ADICIONADO getDocs
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // ====================================================================
@@ -285,8 +285,11 @@
                     const statusText = data.isActive ? 'Ativo' : 'Inativo';
                     const newStatusText = data.isActive ? 'INATIVO' : 'ATIVO';
 
+                    // Mensagem dinâmica para o status
                     modalMessage.innerHTML = `O Guardião **${data.id}** está atualmente <span class="font-bold ${data.isActive ? 'text-green-400' : 'text-red-400'}">${statusText}</span>. Deseja alternar o status para **${newStatusText}**?`;
+                    
                     confirmBtn.textContent = `Alternar para ${newStatusText}`;
+                    confirmBtn.classList.add('bg-orange-600', 'hover:bg-orange-700'); // Cor de alerta
                 }
 
 
@@ -681,11 +684,46 @@
                  }
             });
         }
-
-        window.editNinja = function(id) { 
-             window.openCustomModal('Ação de Edição', `Função de edição de Guardião '${id}' acionada. A lógica de back-end (editar status/pontos) ainda não foi implementada, mas a permissão está OK.`, 'info');
-        }
         
+        // NOVO: IMPLEMENTAÇÃO DA EDIÇÃO DE STATUS DO NINJA
+        window.editNinja = function(id) { 
+            if (!isMasterAdminMode) {
+                 window.openCustomModal('Acesso Negado', 'Você precisa de permissão de Admin Master para editar Guardiões.', 'info');
+                 return;
+            }
+            const ninja = ninjasData[id];
+            if (!ninja) return;
+
+            window.openCustomModal(
+                'Alternar Status do Guardião', 
+                null, 
+                'ninjaEdit', 
+                { id: ninja.id, isActive: ninja.isActive }
+            ).then(async (confirmed) => {
+                 if (confirmed) {
+                     const statusElement = document.getElementById('status');
+                     statusElement.classList.remove('hidden');
+                     statusElement.className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
+                     statusElement.textContent = `Alternando status de '${id}'...`;
+                     
+                     try {
+                         const ninjaRef = doc(db, COLLECTIONS.NINJAS, id);
+                         const newStatus = !ninja.isActive;
+                         
+                         await updateDoc(ninjaRef, { isActive: newStatus });
+                         
+                         statusElement.textContent = `✅ Status de '${id}' alterado para ${newStatus ? 'ATIVO' : 'INATIVO'} com sucesso!`;
+                         statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
+                     } catch (e) {
+                         console.error("Erro ao alterar status:", e);
+                         statusElement.textContent = `❌ Erro ao alterar status: ${e.message}`;
+                         statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                     }
+                     setTimeout(() => statusElement.classList.add('hidden'), 5000);
+                 }
+            });
+        }
+
         // IMPLEMENTAÇÃO REAL DO ADD MISSION (Revisada)
         window.addMission = async function() {
             if (!isWriterMode) {
@@ -947,6 +985,92 @@
             }
         }
         // Fim das Funções de CRUD/Stubs
+
+        // NOVO: Função para limpar o Log de Auxílio
+        window.clearAuxiliaryLog = async function() {
+            if (!isMasterAdminMode) {
+                window.openCustomModal('Acesso Negado', 'Você precisa de permissão Master Admin para excluir o Histórico de Auxílio.', 'info');
+                return;
+            }
+
+            const confirmed = await window.openCustomModal(
+                'Confirmação de Exclusão de Histórico', 
+                'Tem certeza que deseja DELETAR TODO o Histórico de Auxílio? Esta ação é IRREVERSÍVEL e exige Admin Master.', 
+                'confirm'
+            );
+            
+            if (confirmed) {
+                const statusElement = document.getElementById('status');
+                statusElement.classList.remove('hidden');
+                statusElement.className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
+                statusElement.textContent = `Iniciando exclusão do Log de Auxílio...`;
+                
+                try {
+                    const collectionRef = collection(db, COLLECTIONS.AUXILIARY_LOG);
+                    const snapshot = await getDocs(collectionRef); // Usa getDocs
+                    const batch = writeBatch(db);
+                    let count = 0;
+
+                    snapshot.forEach((doc) => {
+                        batch.delete(doc.ref);
+                        count++;
+                    });
+
+                    await batch.commit();
+
+                    statusElement.textContent = `✅ Sucesso! ${count} registros de auxílio excluídos.`;
+                    statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
+                } catch (e) {
+                    console.error("Erro ao excluir Log de Auxílio:", e);
+                    statusElement.textContent = `❌ Erro ao excluir Log de Auxílio: ${e.message}`;
+                    statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                }
+                setTimeout(() => statusElement.classList.add('hidden'), 5000);
+            }
+        }
+
+        // NOVO: Função para limpar o Log de Relatórios
+        window.clearReportsLog = async function() {
+            if (!isMasterAdminMode) {
+                window.openCustomModal('Acesso Negado', 'Você precisa de permissão Master Admin para excluir o Histórico de Relatórios.', 'info');
+                return;
+            }
+
+            const confirmed = await window.openCustomModal(
+                'Confirmação de Exclusão de Histórico', 
+                'Tem certeza que deseja DELETAR TODO o Histórico de Relatórios? Esta ação é IRREVERSÍVEL e exige Admin Master.', 
+                'confirm'
+            );
+            
+            if (confirmed) {
+                const statusElement = document.getElementById('status');
+                statusElement.classList.remove('hidden');
+                statusElement.className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
+                statusElement.textContent = `Iniciando exclusão do Log de Relatórios...`;
+                
+                try {
+                    const collectionRef = collection(db, COLLECTIONS.REPORTS);
+                    const snapshot = await getDocs(collectionRef); // Usa getDocs
+                    const batch = writeBatch(db);
+                    let count = 0;
+
+                    snapshot.forEach((doc) => {
+                        batch.delete(doc.ref);
+                        count++;
+                    });
+                    
+                    await batch.commit();
+
+                    statusElement.textContent = `✅ Sucesso! ${count} relatórios excluídos.`;
+                    statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
+                } catch (e) {
+                    console.error("Erro ao excluir Log de Relatórios:", e);
+                    statusElement.textContent = `❌ Erro ao excluir Log de Relatórios: ${e.message}`;
+                    statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                }
+                setTimeout(() => statusElement.classList.add('hidden'), 5000);
+            }
+        }
 
         window.renderScoreboard = function() {
             const scoreboardBody = document.getElementById('ninjas-scoreboard');
@@ -1654,7 +1778,7 @@
 
         // --- TEMPLATES ---
         window.renderHome = function() { return `
-                <!-- ALTERAÇÃO 2: Conteúdo simplificado da Home -->
+                <!-- Conteúdo simplificado da Home -->
                 <section class="text-center py-20 bg-gray-800 rounded-xl shadow-2xl space-y-8">
                     <h2 class="text-3xl font-bold text-green-400">Bem-vindo(a), Guardião.</h2>
                     
@@ -1911,6 +2035,20 @@
                         </table>
                     </div>
                 </section>
+
+                <!-- Master Admin Tools (Exclusão de Histórico) -->
+                <div id="admin-tools" class="pt-8 space-y-4 admin-only ${isMasterAdminMode ? '' : 'hidden'}">
+                    <h3 class="text-xl font-bold text-red-500 border-b border-red-500/50 pb-2">Ferramentas de Exclusão (Admin Master)</h3>
+                    <p class="text-gray-400">Use com extrema cautela. A exclusão de logs é IRREVERSÍVEL e afeta o Rank.</p>
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        <button onclick="window.clearAuxiliaryLog()" class="w-full py-2 px-4 bg-red-700 hover:bg-red-800 rounded-lg font-bold text-white transition duration-200">
+                            🛡️ Excluir Histórico de Auxílio
+                        </button>
+                        <button onclick="window.clearReportsLog()" class="w-full py-2 px-4 bg-red-700 hover:bg-red-800 rounded-lg font-bold text-white transition duration-200">
+                            ⚔️ Excluir Histórico de Relatórios
+                        </button>
+                    </div>
+                </div>
 
                 <!-- 6. BANCO DE DADOS: MISSÕES E RANKS (MASTER ADMIN / WRITER MODE) -->
                 <section class="space-y-4 pt-8">
