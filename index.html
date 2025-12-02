@@ -62,7 +62,7 @@
         
         <!-- HEADER e NAVEGAÇÃO -->
         <header class="pb-4 border-b border-blue-700/50">
-            <h1 class="text-4xl font-bold text-blue-400 text-center mb-4">📜 Sistema de Registro de Missões Ninja</h1>
+            <h1 class="text-4xl font-bold text-blue-400 text-center mb-4">Registro de Missões Ninja</h1>
             <nav class="flex justify-center bg-gray-900 rounded-xl shadow-lg p-1">
                 <a class="nav-link" onclick="window.renderPage('home')" id="nav-home">Home</a>
                 <a class="nav-link" onclick="window.renderPage('report_form')" id="nav-report_form">Criar Relatório</a>
@@ -83,7 +83,7 @@
         <div id="status" class="text-center p-4 rounded-lg hidden"></div>
         
         <!-- Auth Info for Debugging/Sharing -->
-        <div id="auth-info" class="text-sm text-center text-yellow-500">Modo Offline (LocalStorage) - Não Conectado ao Firebase</div>
+        <div id="auth-info" class="text-sm text-center text-yellow-500"></div>
     </div>
 
     <!-- MODAL DE CONFIRMAÇÃO/EDIÇÃO CUSTOMIZADO -->
@@ -299,7 +299,7 @@
                     <h2 class="text-3xl font-bold text-green-400">Bem-vindo(a) à Folha de Rosto Ninja!</h2>
                     <p class="text-lg text-gray-300 max-w-2xl mx-auto">
                         Este é o painel central para o sistema de rastreamento de missões e ranking dos Guardiões. 
-                        Todos os dados são salvos no armazenamento local do seu navegador (Modo Offline).
+                       
                     </p>
                     <div class="flex flex-col sm:flex-row justify-center gap-6 pt-4">
                         <button onclick="window.renderPage('report_form')" class="py-3 px-8 bg-blue-600 hover:bg-blue-700 rounded-lg font-bold text-white text-xl transition duration-200 shadow-lg shadow-blue-500/50">
@@ -1285,7 +1285,7 @@
 
             // Esta validação é importante e deve permanecer aqui.
             if (executorIds.length === 0) {
-                 document.getElementById('status').textContent = '⚠️ Erro: Por favor, selecione pelo menos um ID Ninja Executor.';
+                 document.getElementById('status').textContent = 'Atualizando.';
                  document.getElementById('status').className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
                  setTimeout(() => document.getElementById('status').classList.add('hidden'), 7000);
                  return;
@@ -1697,3 +1697,4 @@
     </script>
 </body>
 </html>
+
