@@ -13,7 +13,7 @@
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-thumb { background: #3b82f6; border-radius: 4px; }
         ::-webkit-scrollbar-track { background: #1e293b; }
-        .remove-btn, .edit-btn { transition: all 0.1s ease-in-out; }
+        .remove-btn, .edit-btn, .admin-only { transition: all 0.1s ease-in-out; }
     </style>
 </head>
 <body class="p-4 sm:p-8 text-gray-100">
@@ -30,7 +30,25 @@
         <!-- Auth Info for Debugging/Sharing -->
         <div id="auth-info" class="text-sm text-center text-gray-500">Aguardando autenticação...</div>
 
+        <!-- NOVO: PAINEL DE ADMINISTRAÇÃO (Acesso de Escrita/Edição) -->
+        <section id="admin-panel" class="space-y-4 pt-4 pb-4 bg-gray-900 p-6 rounded-xl shadow-inner border border-yellow-500/50">
+             <h2 class="text-2xl font-bold text-yellow-400 text-center flex justify-center items-center gap-2">
+                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" /></svg>
+                 Painel de Administração (Chave Mestra)
+             </h2>
+             <p class="text-center text-gray-400">Insira a Chave Mestra e seu ID de Guardião para habilitar a edição e o cadastro.</p>
+             <div class="flex flex-col md:flex-row gap-4 max-w-lg mx-auto">
+                 <input id="admin-id-input" type="text" placeholder="Seu ID de Guardião (Executor)" class="flex-grow p-2 rounded-lg bg-gray-700 border border-gray-600 text-white shadow-inner">
+                 <input id="admin-key-input" type="password" placeholder="Chave Mestra Secreta" class="flex-grow p-2 rounded-lg bg-gray-700 border border-gray-600 text-white shadow-inner">
+                 <button id="set-admin-key" class="w-full md:w-auto py-2 px-4 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-bold text-white transition duration-200">
+                     Verificar Acesso
+                 </button>
+             </div>
+        </section>
+
+
         <!-- 1. FORMULÁRIO PRINCIPAL (REGISTRO DE RELATÓRIO) -->
+        <!-- Este formulário está sempre visível e não requer a Chave Admin. -->
         <section id="report-form-section" class="bg-gray-800 p-6 rounded-xl shadow-2xl space-y-6">
             <h2 class="text-2xl font-semibold border-b pb-3 border-gray-700 text-blue-300">Novo Relatório de Missão</h2>
 
@@ -190,8 +208,8 @@
             <h2 class="text-3xl font-bold text-yellow-400 text-center">Cadastro: Guardiões (Membros da Organização)</h2>
             <p class="text-center text-gray-400">Pessoas que pontuam no Rank dos Guardiões.</p>
 
-            <!-- Add New Ninja Form -->
-            <div class="bg-gray-700 p-4 rounded-lg shadow-inner flex flex-col sm:flex-row gap-4">
+            <!-- Add New Ninja Form (ADMIN ONLY) -->
+            <div id="add-ninja-form" class="bg-gray-700 p-4 rounded-lg shadow-inner flex flex-col sm:flex-row gap-4 admin-only hidden">
                 <input id="new-ninja-id" type="text" placeholder="ID do Novo Guardião (Ex: Dellzito)" class="flex-grow p-2 rounded-lg bg-gray-800 border border-gray-600 text-white">
                 <button id="add-ninja" class="w-full sm:w-auto py-2 px-4 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-bold text-white transition duration-200" onclick="window.addNinja()">Adicionar Guardião</button>
             </div>
@@ -202,7 +220,7 @@
                         <tr>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">ID Guardião</th>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Ação</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider admin-only hidden">Ação</th>
                         </tr>
                     </thead>
                     <tbody id="ninjas-cadastro" class="bg-gray-800 divide-y divide-gray-700">
@@ -217,8 +235,8 @@
             <h2 class="text-3xl font-bold text-green-400 text-center">Banco de Dados: Quests e Ranks (Base)</h2>
             <p class="text-center text-gray-400">Aqui você pode adicionar, editar ou excluir as quests disponíveis.</p>
             
-            <!-- Add New Mission Form -->
-            <div class="bg-gray-700 p-4 rounded-lg shadow-inner flex flex-col sm:flex-row gap-4">
+            <!-- Add New Mission Form (ADMIN ONLY) -->
+            <div id="add-mission-form" class="bg-gray-700 p-4 rounded-lg shadow-inner flex flex-col sm:flex-row gap-4 admin-only hidden">
                 <input id="new-mission-name" type="text" placeholder="Novo Nome da Missão" class="flex-grow p-2 rounded-lg bg-gray-800 border border-gray-600 text-white">
                 <select id="new-mission-rank-select" class="w-full sm:w-32 p-2 rounded-lg bg-gray-800 border border-gray-600 text-white">
                      <option value="S-Rank">S-Rank (5 Pts)</option>
@@ -240,7 +258,7 @@
                             <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Nome da Missão</th>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Rank Base</th>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Pontos</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Ação</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider admin-only hidden">Ação</th>
                         </tr>
                     </thead>
                     <tbody id="missions-database" class="bg-gray-800 divide-y divide-gray-700">
@@ -280,11 +298,33 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, onSnapshot, collection, query, orderBy, deleteDoc, writeBatch, setLogLevel, updateDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Configurações e Variáveis Globais (MANDATÓRIO)
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        // ====================================================================
+        // IMPORTANTE: CONFIGURAÇÕES DO FIREBASE HARDCODED
+        // --------------------------------------------------------------------
         
+        // 1. Defina um ID ÚNICO para o seu App/Guilda.
+        const APP_IDENTIFIER = 'guilda-konoha-2024'; // EX: guilda-konoha-2024
+        
+        // 2. Cole a configuração JSON do seu projeto Firebase aqui.
+        const FIREBASE_CONFIG_JSON = null; 
+        
+        // 3. Token de Autenticação.
+        const INITIAL_AUTH_TOKEN = null; 
+
+        // VARIÁVEIS INTERNAS (NÃO MEXER):
+        const appId = APP_IDENTIFIER;
+        const firebaseConfig = FIREBASE_CONFIG_JSON;
+        const initialAuthToken = INITIAL_AUTH_TOKEN;
+
+        // ====================================================================
+        // CHAVE MESTRA SECRETA (Será lida do Ambiente de Hospedagem)
+        // Se estiver rodando localmente (sem deploy), use um valor temporário AQUI.
+        // Se estiver no Vercel/Netlify, o valor de process.env.ADMIN_MASTER_KEY será usado.
+        const ADMIN_MASTER_KEY_SECRET = (typeof process !== 'undefined' && process.env.ADMIN_MASTER_KEY) ? process.env.ADMIN_MASTER_KEY : 'CHAVEDEMODEFAULT'; 
+
+        let isAdminMode = false;
+        // ====================================================================
+
         setLogLevel('debug'); // Ativa logs do Firestore
 
         let app;
@@ -292,22 +332,21 @@
         let auth;
         let userId = null;
         let authReady = false;
-        let currentProofId = ''; // Armazena o ID de Evidência atual e único
+        let currentProofId = ''; 
 
         // Estrutura de Coleções
         const COLLECTIONS = {
             MISSIONS: `artifacts/${appId}/public/data/missions`,
             REPORTS: `artifacts/${appId}/public/data/reports`,
-            NINJAS: `artifacts/${appId}/public/data/ninjas`, // Membros da Org (Guardiões - Pontuam no Rank)
-            AUXILIARY_LOG: `artifacts/${appId}/public/data/auxiliary_log` // Log de auxiliares (Potenciais Membros - Pontuam separadamente)
+            NINJAS: `artifacts/${appId}/public/data/ninjas`, 
+            AUXILIARY_LOG: `artifacts/${appId}/public/data/auxiliary_log` 
         };
 
         let missionsData = {}; 
-        let ninjasData = {}; // Guarda o estado dos ninjas/guardiões cadastrados e seus pontos
-        let auxiliaryData = {}; // Guarda o estado dos auxiliares e seus pontos
+        let ninjasData = {}; 
+        let auxiliaryData = {}; 
 
-        // Mapeamento de Rank para Pontos (CORRIGIDO E ROBUSTO)
-        // Chaves são o Rank em maiúsculas sem espaços ou hífens (Ex: S-Rank -> SRANK)
+        // Mapeamento de Rank para Pontos
         const RANK_POINTS = {
             'SRANK': 5,
             'ARANK': 4,
@@ -331,8 +370,6 @@
         
         /**
          * Função utilitária para limpar e padronizar o nome do rank para lookup.
-         * @param {string} rank 
-         * @returns {string} Rank limpo e em CAPS.
          */
         function cleanRankForLookup(rank) {
             if (!rank) return '';
@@ -340,10 +377,7 @@
         }
 
         /**
-         * Função utilitária para normalizar IDs (Ninja/Auxiliar) para minúsculas.
-         * Garante que "Jose" e "jose" sejam o mesmo usuário no banco de dados.
-         * @param {string} id O ID de usuário (Ninja ou Auxiliar).
-         * @returns {string} O ID normalizado em minúsculas.
+         * Função utilitária para normalizar IDs (Ninja/Auxiliar/Admin) para minúsculas.
          */
         function normalizeId(id) {
             if (!id) return '';
@@ -352,23 +386,57 @@
         
         /**
          * Função utilitária para gerar ID limpo para Firestore Doc ID de Missões.
-         * @param {string} name Nome da Missão.
-         * @returns {string} ID da Missão limpo e em CAPS.
          */
         function generateMissionDocId(name) {
             return name.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
         }
 
+        // --- Funções de Controle de Acesso e UI ---
+
+        window.toggleAdminUI = function(isAuthorized) {
+            isAdminMode = isAuthorized;
+            const adminElements = document.querySelectorAll('.admin-only');
+            
+            adminElements.forEach(el => {
+                if (isAuthorized) {
+                    el.classList.remove('hidden');
+                } else {
+                    el.classList.add('hidden');
+                }
+            });
+            
+            // Re-renderiza as tabelas de cadastro e missões para exibir/ocultar a coluna "Ação"
+            setupFirestoreListeners(); 
+        }
+
+        window.checkAdminKey = function() {
+            const adminIdRaw = document.getElementById('admin-id-input').value.trim();
+            const adminKey = document.getElementById('admin-key-input').value.trim();
+            const normalizedId = normalizeId(adminIdRaw);
+
+            const statusElement = document.getElementById('status');
+            
+            // Agora verifica se a chave digitada corresponde à chave SECRETA do ambiente.
+            if (adminKey === ADMIN_MASTER_KEY_SECRET) {
+                // Se a chave estiver correta, o ID digitado se torna o ID do Admin
+                window.toggleAdminUI(true);
+                document.getElementById('admin-key-input').value = ''; // Limpa chave após sucesso
+                statusElement.textContent = `✅ Modo Administrador ATIVADO. Usuário: ${normalizedId}`;
+                statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
+                setTimeout(() => statusElement.classList.add('hidden'), 5000);
+            } else {
+                window.toggleAdminUI(false);
+                statusElement.textContent = '❌ Acesso Negado. Chave Mestra Incorreta. Apenas Modo Leitura/Registro de Relatório disponível.';
+                statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                setTimeout(() => statusElement.classList.add('hidden'), 7000);
+            }
+        }
+        
         // --- Funções de Modal Customizado ---
         let resolveModalPromise = null;
 
         /**
          * Abre o modal customizado.
-         * @param {string} title Título do modal.
-         * @param {string} message Mensagem de texto.
-         * @param {string} type 'confirm', 'input' ou 'ninjaEdit'.
-         * @param {Object} [data={}] Dados adicionais para inputs.
-         * @returns {Promise<any>} Promise que resolve com o resultado (true/false, ou objeto de dados).
          */
         function openCustomModal(title, message, type, data = {}) {
             return new Promise(resolve => {
@@ -392,18 +460,15 @@
                 inputContainer.classList.add('hidden');
                 input1.value = '';
                 input2.innerHTML = '';
-                input1.type = 'text'; // Reset type for input 1
+                input1.type = 'text'; 
 
-                // Limpa listeners antigos para evitar chamadas duplicadas
                 confirmBtn.onclick = null;
                 cancelBtn.onclick = null;
 
                 if (type === 'confirm') {
-                    // Botões de confirmação simples
                     confirmBtn.textContent = 'Confirmar';
                     confirmBtn.classList.remove('hidden');
                 } else if (type === 'input') {
-                    // Modal de entrada para Edição de Missão
                     inputContainer.classList.remove('hidden');
                     label1.textContent = 'Novo Nome da Missão:';
                     input1.value = data.name || '';
@@ -411,7 +476,6 @@
                     input2.outerHTML = `<select id="modal-input-2" class="w-full p-2.5 rounded-lg bg-gray-700 border border-gray-600 text-white"></select>`;
                     const selectRank = document.getElementById('modal-input-2');
 
-                    // Preenche opções de Rank
                     RANK_OPTIONS.forEach(rank => {
                         const option = document.createElement('option');
                         option.value = rank;
@@ -437,7 +501,6 @@
                     };
 
                 } else if (type === 'ninjaEdit') {
-                    // Edição de status do Guardião
                     const statusText = data.isActive ? 'Ativo' : 'Inativo';
                     const newStatusText = data.isActive ? 'INATIVO' : 'ATIVO';
 
@@ -470,44 +533,65 @@
         // --- Funções de Inicialização e Autenticação ---
         async function initializeFirebase() {
             if (!firebaseConfig) {
-                document.getElementById('status').className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
-                document.getElementById('status').textContent = 'Erro: Configuração do Firebase não encontrada.';
-                return;
+                const statusElement = document.getElementById('status');
+                if (statusElement) {
+                    statusElement.className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
+                    statusElement.textContent = `AVISO: Usando o ID da Guilda '${APP_IDENTIFIER}' como contexto. Para usar um banco de dados privado, você precisa inserir o FIREBASE_CONFIG_JSON.`;
+                }
             }
 
             try {
-                app = initializeApp(firebaseConfig);
+                // Remove apiKey da configuração dummy, pois causou o erro de validação (auth/api-key-not-valid).
+                const configToUse = firebaseConfig || {
+                    authDomain: "dummy.firebaseapp.com",
+                    projectId: appId, 
+                };
+                
+                app = initializeApp(configToUse);
                 db = getFirestore(app);
-                auth = getAuth(app);
 
-                // Autenticação com Token Customizado ou Anônima
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
+                if (firebaseConfig) {
+                    // Se houver uma configuração real (com apiKey válido), tenta autenticar.
+                    auth = getAuth(app);
 
-                onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        userId = user.uid;
-                        authReady = true;
-                        document.getElementById('auth-info').textContent = `Usuário ID (Auth): ${userId} | App ID: ${appId}`;
-                        setupFirestoreListeners();
-                        generateProofId(); // Gera o ID de evidência inicial
-                        addMissionEntry(); 
-                        document.getElementById('submit-report').disabled = false;
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(auth, initialAuthToken);
                     } else {
-                        userId = null;
-                        authReady = true; 
-                        document.getElementById('auth-info').textContent = `Usuário Anônimo. App ID: ${appId}`;
-                        setupFirestoreListeners(); 
+                        await signInAnonymously(auth);
                     }
-                });
+
+                    onAuthStateChanged(auth, (user) => {
+                        if (user) {
+                            userId = user.uid;
+                            authReady = true;
+                            document.getElementById('auth-info').textContent = `Usuário ID (Auth): ${userId} | App ID (DB Contexto): ${appId}`;
+                            setupFirestoreListeners();
+                            generateProofId(); 
+                            addMissionEntry(); 
+                            document.getElementById('submit-report').disabled = false;
+                        } else {
+                            userId = null;
+                            authReady = true; 
+                            document.getElementById('auth-info').textContent = `Usuário Anônimo. App ID (DB Contexto): ${appId}`;
+                            setupFirestoreListeners(); 
+                        }
+                    });
+                } else {
+                    // Se não houver config real (modo local/dummy), simula o estado de autenticação
+                    // para desbloquear o app para uso anônimo local e evita a falha do Auth.
+                    userId = 'anon-local-' + Math.random().toString(36).substring(2, 6);
+                    authReady = true;
+                    document.getElementById('auth-info').textContent = `Usuário ID (Local Anônimo): ${userId} | App ID (DB Contexto): ${appId}`;
+                    setupFirestoreListeners();
+                    generateProofId(); 
+                    addMissionEntry(); 
+                    document.getElementById('submit-report').disabled = false;
+                }
 
             } catch (error) {
                 console.error("Erro na inicialização ou autenticação do Firebase:", error);
                 document.getElementById('status').className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
-                document.getElementById('status').textContent = `Erro ao conectar: ${error.message}`;
+                document.getElementById('status').textContent = `Erro ao conectar: ${error.message}. Se você está vendo este erro, por favor insira o seu FIREBASE_CONFIG_JSON.`;
             }
         }
 
@@ -522,33 +606,43 @@
                 const missionsBody = document.getElementById('missions-database');
                 missionsBody.innerHTML = '';
                 
+                const showActionColumn = isAdminMode;
+                
+                const actionHeader = missionsBody.closest('table').querySelector('th.admin-only');
+                if (actionHeader) {
+                    if (showActionColumn) actionHeader.classList.remove('hidden');
+                    else actionHeader.classList.add('hidden');
+                }
+
                 snapshot.forEach(doc => {
                     const data = doc.data();
-                    data.id = doc.id; // Doc ID é o nome limpo e em CAPS
+                    data.id = doc.id; 
                     missionsData[data.name] = data; 
                     
-                    // Codifica os parâmetros para garantir que não quebrem a string onclick
                     const encodedId = encodeURIComponent(data.id);
                     const encodedName = encodeURIComponent(data.name);
                     const encodedRank = encodeURIComponent(data.baseRank);
                     
+                    const actionCell = showActionColumn ? `
+                        <td class="px-6 py-2 whitespace-nowrap text-right text-sm font-medium flex gap-2">
+                            <button onclick="window.editMission('${encodedId}', '${encodedName}', '${encodedRank}')" class="text-blue-500 hover:text-blue-700 transition duration-150 edit-btn">Editar</button>
+                            <button onclick="window.deleteMission('${encodedId}')" class="text-red-500 hover:text-red-700 transition duration-150 remove-btn">Excluir</button>
+                        </td>
+                    ` : '';
+
                     missionsBody.innerHTML += `
                         <tr class="hover:bg-gray-700/50">
                             <td class="px-6 py-2 whitespace-nowrap text-sm font-medium text-white">${data.name}</td>
                             <td class="px-6 py-2 whitespace-nowrap text-sm text-yellow-400 font-semibold">${data.baseRank.replace('-Rank', '')}</td>
                             <td class="px-6 py-2 whitespace-nowrap text-sm text-green-400">${data.points}</td>
-                            <td class="px-6 py-2 whitespace-nowrap text-right text-sm font-medium flex gap-2">
-                                <button onclick="window.editMission('${encodedId}', '${encodedName}', '${encodedRank}')" class="text-blue-500 hover:text-blue-700 transition duration-150 edit-btn">Editar</button>
-                                <button onclick="window.deleteMission('${encodedId}')" class="text-red-500 hover:text-red-700 transition duration-150 remove-btn">Excluir</button>
-                            </td>
+                            ${actionCell}
                         </tr>
                     `;
                 });
                 
-                // IMPORTANTE: Atualiza os selects de missão em todos os campos dinâmicos
                 updateMissionSelects();
 
-                if (snapshot.empty) {
+                if (snapshot.empty && !isAdminMode) {
                     seedInitialData();
                 }
             });
@@ -560,50 +654,73 @@
                 const executorSelect = document.getElementById('executor-id');
                 ninjasBody.innerHTML = '';
                 executorSelect.innerHTML = '<option value="" disabled selected>Selecione o Executor</option>';
+                
+                const showActionColumn = isAdminMode;
+
+                const actionHeader = ninjasBody.closest('table').querySelector('th.admin-only');
+                if (actionHeader) {
+                    if (showActionColumn) actionHeader.classList.remove('hidden');
+                    else actionHeader.classList.add('hidden');
+                }
+
 
                 const scoreboardData = [];
                 
                 snapshot.forEach(doc => {
                     const data = doc.data();
-                    data.id = doc.id; // ID do documento é o ID do ninja (agora em minúsculas)
+                    data.id = doc.id; 
                     ninjasData[data.id] = data;
                     scoreboardData.push(data);
                     
-                    const option = document.createElement('option');
-                    option.value = data.id; // Valor no select é o ID normalizado
-                    option.textContent = data.id;
-                    executorSelect.appendChild(option);
+                    if (data.isActive) {
+                        const option = document.createElement('option');
+                        option.value = data.id; 
+                        option.textContent = data.id;
+                        executorSelect.appendChild(option);
+                    }
 
                     const statusClass = data.isActive ? 'text-green-400' : 'text-red-400';
                     const statusText = data.isActive ? 'Ativo' : 'Inativo';
+                    
+                    const actionCell = showActionColumn ? `
+                        <td class="px-6 py-2 whitespace-nowrap text-right text-sm font-medium">
+                            <button onclick="window.editNinja('${data.id}')" class="text-blue-500 hover:text-blue-700 transition duration-150 edit-btn mr-2">Editar Status</button>
+                            <button onclick="window.deleteNinja('${data.id}')" class="text-red-500 hover:text-red-700 transition duration-150">Excluir</button>
+                        </td>
+                    ` : '';
+
                     ninjasBody.innerHTML += `
                         <tr class="hover:bg-gray-700/50">
                             <td class="px-6 py-2 whitespace-nowrap text-sm font-medium text-white">${data.id}</td>
                             <td class="px-6 py-2 whitespace-nowrap text-sm ${statusClass}">${statusText}</td>
-                            <td class="px-6 py-2 whitespace-nowrap text-right text-sm font-medium">
-                                <button onclick="window.editNinja('${data.id}')" class="text-blue-500 hover:text-blue-700 transition duration-150 edit-btn mr-2">Editar</button>
-                                <button onclick="window.deleteNinja('${data.id}')" class="text-red-500 hover:text-red-700 transition duration-150">Excluir</button>
-                            </td>
+                            ${actionCell}
                         </tr>
                     `;
                 });
 
+                if (isAdminMode) {
+                    document.getElementById('add-ninja-form').classList.remove('hidden');
+                    document.getElementById('add-mission-form').classList.remove('hidden');
+                } else {
+                    document.getElementById('add-ninja-form').classList.add('hidden');
+                    document.getElementById('add-mission-form').classList.add('hidden');
+                }
+
                 updateScoreboard(scoreboardData);
             });
             
-            // 3. Log de Auxílio (Tabela 3) - Acumula pontos
+            // 3. Log de Auxílio (Tabela 3) - Sem Alterações
             onSnapshot(collection(db, COLLECTIONS.AUXILIARY_LOG), (snapshot) => {
                 auxiliaryData = {};
                 const auxiliaryLogBody = document.getElementById('auxiliary-log');
                 auxiliaryLogBody.innerHTML = '';
                 
-                // Ordena os auxiliares por pontos
                 const sortedAuxiliaries = [];
                 snapshot.forEach(doc => sortedAuxiliaries.push(doc.data()));
                 sortedAuxiliaries.sort((a, b) => b.rankPoints - a.rankPoints);
                 
                 sortedAuxiliaries.forEach(data => {
-                    auxiliaryData[data.id] = data; // Salva dados do auxiliar (ID normalizado)
+                    auxiliaryData[data.id] = data; 
                     const lastParticipation = data.lastParticipation ? new Date(data.lastParticipation).toLocaleDateString('pt-BR') : 'N/A';
                     
                     auxiliaryLogBody.innerHTML += `
@@ -617,16 +734,13 @@
             });
 
 
-            // 4. Relatórios / Log de Missões (Tabela 4)
-            // Não usando orderBy na query do Firestore, mas sim em memória, para evitar erros de índice.
+            // 4. Relatórios / Log de Missões (Tabela 4) - Sem Alterações
             onSnapshot(collection(db, COLLECTIONS.REPORTS), (snapshot) => {
                 const reportsLog = document.getElementById('reports-log');
                 reportsLog.innerHTML = '';
                 
                 const reports = [];
                 snapshot.forEach(doc => reports.push(doc.data()));
-
-                // Ordenação em memória por timestamp (mais recente primeiro)
                 reports.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
                 reports.forEach(data => {
@@ -636,8 +750,6 @@
                         `<span class="text-xs text-gray-400 block">${name}</span>`
                     ).join('');
                     
-                    // O ID do executor e dos auxiliares no relatório virá em minúsculas
-
                     reportsLog.innerHTML += `
                         <tr class="hover:bg-gray-700/50">
                             <td class="px-4 py-2 whitespace-nowrap text-xs text-gray-400 truncate w-1/12">${data.reportId}</td>
@@ -660,10 +772,9 @@
             });
         }
         
-        // --- Funções Auxiliares e de UI ---
+        // --- Funções Auxiliares e de CRUD (Proteções de Admin Adicionadas) ---
 
         function generateProofId() {
-            // Gera um ID de 8 caracteres alfanuméricos
             currentProofId = Math.random().toString(36).substring(2, 10).toUpperCase();
             document.getElementById('proof-id').value = currentProofId;
         }
@@ -676,7 +787,6 @@
             tempInput.select();
             
             try {
-                // Comando de cópia mais compatível em iframes
                 document.execCommand('copy'); 
                 console.log('ID de Evidência copiado: ' + text);
             } catch (err) {
@@ -686,7 +796,6 @@
         }
 
         function getRankColor(rank) {
-            // Usa o rank para determinar a cor
             const base = rank.toUpperCase().replace('-RANK', '').trim();
             switch (base) {
                 case 'S': return 'text-purple-400';
@@ -702,9 +811,7 @@
         }
 
         function updateScoreboard(ninjas) {
-            // Filtra e ordena apenas os ninjas que são Guardiões
             const guardians = ninjas.filter(n => ninjasData[n.id]); 
-            // Sort in memory
             guardians.sort((a, b) => b.rankPoints - a.rankPoints);
             
             const scoreboardBody = document.getElementById('ninjas-scoreboard');
@@ -735,7 +842,6 @@
         function updateMissionSelects() {
             const selects = document.querySelectorAll('.mission-select-dropdown');
             
-            // Ordena as missões pelo rank (S, A, B, C, D)
             const orderedMissions = Object.values(missionsData).sort((a, b) => {
                 const rankA = cleanRankForLookup(a.baseRank);
                 const rankB = cleanRankForLookup(b.baseRank);
@@ -747,7 +853,6 @@
                 return a.name.localeCompare(b.name);
             });
 
-            // Formato de Rank Simplificado: (Rank B)
             const missionOptions = orderedMissions
                 .map(m => `<option value="${m.name}" data-rank="${m.baseRank}" data-points="${m.points}">${m.name} (Rank ${m.baseRank.replace('-Rank', '')}, ${m.points} Pts)</option>`).join(''); 
 
@@ -821,7 +926,6 @@
                     const currentRank = cleanRankForLookup(mission.baseRank);
                     const highestRankClean = cleanRankForLookup(highestRank);
 
-                    // Determina o Rank mais alto com base na ordem
                     const currentIndex = RANK_ORDER.findIndex(r => currentRank.startsWith(r.toUpperCase()));
                     const highestIndex = RANK_ORDER.findIndex(r => highestRankClean.startsWith(r.toUpperCase()));
 
@@ -848,13 +952,11 @@
             const { totalPoints, finalReportRank, serviceNames } = calculateTotalPointsAndRank();
 
             document.getElementById('total-points').value = totalPoints;
-            // Garantir que a exibição do rank seja (Rank X)
             document.getElementById('final-report-rank').value = finalReportRank === 'N/A' ? 'N/A' : `(Rank ${finalReportRank.replace('-Rank', '')})`;
 
             let description = 'Aguardando informações...';
 
             if (serviceNames.length > 0 && executorId && clients && missionDetails) {
-                // A normalização para o preview é opcional, mas vamos usar o ID original para uma melhor legibilidade.
                 const clientsList = clients.split(',').map(c => c.trim()).filter(c => c).join(', ');
                 const executorText = executorId;
                 const supportText = supportIds.length > 0 ? ` com o auxílio de ${supportIds.join(', ')}` : '';
@@ -867,9 +969,7 @@
             document.getElementById('submit-report').disabled = !(serviceNames.length > 0 && executorId && clients && missionDetails);
         }
         
-        // --- Funções de CRUD do Firestore ---
-
-        // Dados iniciais com a lista fornecida
+        // Dados iniciais com a lista fornecida (Sem Alterações)
         async function seedInitialData() {
             if (!db) return;
 
@@ -900,7 +1000,6 @@
             let ninjasAdded = 0;
 
             for (const mission of newMissionsList) {
-                // Usa o nome da missão (limpo) como ID do documento
                 const docId = generateMissionDocId(mission.name);
                 const missionRef = doc(db, COLLECTIONS.MISSIONS, docId);
                 const cleanRank = cleanRankForLookup(mission.rank);
@@ -912,10 +1011,9 @@
                 });
             }
 
-            // Garante que Guardiões de exemplo sejam criados em minúsculas
             const exampleNinjas = ['dellzito', 'alnvctr'];
             for (const id of exampleNinjas) {
-                const normalizedId = normalizeId(id); // Normaliza (já são minúsculas, mas por segurança)
+                const normalizedId = normalizeId(id); 
                 const ninjaRef = doc(db, COLLECTIONS.NINJAS, normalizedId);
                 const ninjaSnap = await getDoc(ninjaRef);
                 if (!ninjaSnap.exists()) {
@@ -929,16 +1027,16 @@
                 console.log(`Dados iniciais: ${newMissionsList.length} missões e ${ninjasAdded} guardiões exemplos inseridos/atualizados.`);
             }
         }
-
-        // Adicionar Nova Missão
+        
+        // Adicionar Nova Missão (Protegida)
         window.addMission = async function() {
+            if (!isAdminMode) return; 
             const name = document.getElementById('new-mission-name').value.trim();
             const rank = document.getElementById('new-mission-rank-select').value.trim();
             const cleanRank = cleanRankForLookup(rank);
             const points = RANK_POINTS[cleanRank] || 0;
 
             if (!name || !rank) {
-                // Usando log de erro em vez de alert
                 console.error('Por favor, preencha o nome e selecione o Rank da Missão.');
                 return;
             }
@@ -957,8 +1055,9 @@
             }
         }
         
-        // Editar Missão (ATUALIZADA com Modal Customizado)
+        // Editar Missão (Protegida)
         window.editMission = async function(encodedId, encodedName, encodedRank) {
+            if (!isAdminMode) return; 
             const docId = decodeURIComponent(encodedId);
             const currentName = decodeURIComponent(encodedName);
             const currentRank = decodeURIComponent(encodedRank);
@@ -983,7 +1082,6 @@
                 const currentRef = doc(db, COLLECTIONS.MISSIONS, docId);
                 
                 if (finalName !== currentName) {
-                    // Nome mudou: deleta o antigo e cria um novo
                     const newDocId = generateMissionDocId(finalName);
                     const newRef = doc(db, COLLECTIONS.MISSIONS, newDocId);
                     
@@ -996,7 +1094,6 @@
                     console.log(`Missão ${currentName} (${docId}) movida/editada para ${finalName} (${newDocId}).`);
 
                 } else {
-                    // Nome não mudou: apenas atualiza o rank e os pontos
                     await updateDoc(currentRef, {
                         baseRank: finalRank,
                         points: newPoints
@@ -1005,15 +1102,15 @@
                 }
             } catch (error) {
                 console.error("Erro ao editar missão:", error);
-                // Informa o erro via log, já que não podemos usar alert
                 document.getElementById('status').textContent = `Erro ao editar missão: ${error.message}`;
                 document.getElementById('status').classList.remove('hidden');
                 setTimeout(() => document.getElementById('status').classList.add('hidden'), 5000);
             }
         }
 
-        // Excluir Missão (ATUALIZADA com Modal Customizado)
+        // Excluir Missão (Protegida)
         window.deleteMission = async function(encodedId) {
+            if (!isAdminMode) return; 
             const id = decodeURIComponent(encodedId);
             const missionName = missionsData[Object.keys(missionsData).find(key => missionsData[key].id === id)]?.name || id;
 
@@ -1039,8 +1136,9 @@
             }
         }
         
-        // Adicionar Novo Guardião (Executor/Membro da Org)
+        // Adicionar Novo Guardião (Protegido)
         window.addNinja = async function() {
+            if (!isAdminMode) return; 
             let ninjaId = document.getElementById('new-ninja-id').value.trim();
 
             if (!ninjaId) {
@@ -1048,11 +1146,11 @@
                 return; 
             }
             
-            const normalizedId = normalizeId(ninjaId); // <<< NORMALIZAÇÃO
+            const normalizedId = normalizeId(ninjaId); 
 
             try {
-                await setDoc(doc(db, COLLECTIONS.NINJAS, normalizedId), { // Usa ID normalizado
-                    id: normalizedId, // Armazena ID normalizado
+                await setDoc(doc(db, COLLECTIONS.NINJAS, normalizedId), { 
+                    id: normalizedId, 
                     isActive: true,
                     rankPoints: ninjasData[normalizedId]?.rankPoints || 0,
                     missionsCompleted: ninjasData[normalizedId]?.missionsCompleted || 0
@@ -1064,10 +1162,11 @@
             }
         }
         
-        // Excluir Guardião (ATUALIZADA com Modal Customizado)
+        // Excluir Guardião (Protegido)
         window.deleteNinja = async function(encodedId) {
+            if (!isAdminMode) return; 
             const id = decodeURIComponent(encodedId); 
-            const normalizedId = normalizeId(id); // Normaliza para garantir a exclusão do doc correto
+            const normalizedId = normalizeId(id); 
             
             const shouldDelete = await openCustomModal(
                 'Confirmação de Exclusão de Guardião',
@@ -1081,9 +1180,8 @@
             }
 
             try {
-                await deleteDoc(doc(db, COLLECTIONS.NINJAS, normalizedId)); // Usa ID normalizado
-                const auxRef = doc(db, COLLECTIONS.AUXILIARY_LOG, normalizedId); // Usa ID normalizado
-                // Remove o auxiliar também, caso ele exista no log de prospectos
+                await deleteDoc(doc(db, COLLECTIONS.NINJAS, normalizedId)); 
+                const auxRef = doc(db, COLLECTIONS.AUXILIARY_LOG, normalizedId); 
                 await deleteDoc(auxRef).catch(() => {}); 
                 console.log(`Guardião ${normalizedId} excluído.`);
             } catch (error) {
@@ -1091,10 +1189,11 @@
             }
         }
         
-        // Editar Guardião (Novo - ATUALIZADA com Modal Customizado)
+        // Editar Guardião (Status) (Protegido)
         window.editNinja = async function(encodedId) {
+            if (!isAdminMode) return; 
             const id = decodeURIComponent(encodedId);
-            const normalizedId = normalizeId(id); // Normaliza para lookup
+            const normalizedId = normalizeId(id); 
             const currentNinja = ninjasData[normalizedId];
             
             if (!currentNinja) {
@@ -1104,7 +1203,7 @@
             
             const newStatus = await openCustomModal(
                 `Alternar Status do Guardião: ${normalizedId}`,
-                '', // A mensagem é injetada dentro da função openCustomModal para ter formatação dinâmica
+                '', 
                 'ninjaEdit',
                 { id: normalizedId, isActive: currentNinja.isActive }
             );
@@ -1116,7 +1215,7 @@
 
             try {
                 const newIsActive = !currentNinja.isActive;
-                await updateDoc(doc(db, COLLECTIONS.NINJAS, normalizedId), { // Usa ID normalizado
+                await updateDoc(doc(db, COLLECTIONS.NINJAS, normalizedId), { 
                     isActive: newIsActive
                 });
                 console.log(`Status do Guardião ${normalizedId} atualizado para ${newIsActive ? 'ATIVO' : 'INATIVO'}.`);
@@ -1128,7 +1227,7 @@
             }
         }
 
-        // Submeter Relatório Principal
+        // Submeter Relatório Principal (Sem Alterações na Lógica de Admin)
         document.getElementById('submit-report').addEventListener('click', async () => {
             const executorIdRaw = document.getElementById('executor-id').value;
             const clients = document.getElementById('clients').value.split(',').map(c => c.trim()).filter(c => c);
@@ -1139,13 +1238,11 @@
 
             const { totalPoints, finalReportRank, serviceNames } = calculateTotalPointsAndRank();
 
-            // --- Normalização de IDs para consistência no Firestore ---
             const executorId = normalizeId(executorIdRaw); 
-            const supportIds = supportIdsRaw.map(normalizeId).filter(id => id); // Normaliza e filtra vazios
+            const supportIds = supportIdsRaw.map(normalizeId).filter(id => id); 
 
 
             if (serviceNames.length === 0 || !executorId || clients.length === 0 || !missionDetails) {
-                // Adiciona feedback visual para o usuário
                 document.getElementById('status').textContent = '⚠️ Erro: Por favor, selecione pelo menos uma missão e preencha todos os campos de cabeçalho (Executor, Clientes e Detalhes da Missão).';
                 document.getElementById('status').className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
                 setTimeout(() => document.getElementById('status').classList.add('hidden'), 7000);
@@ -1156,31 +1253,27 @@
             
             const reportId = Math.random().toString(36).substring(2, 10).toUpperCase(); 
             const description = document.getElementById('description-preview').textContent;
-            
             const pointsToAward = totalPoints;
             
             try {
                 const batch = writeBatch(db);
 
-                // 1. Registra o Relatório da Missão (Report)
                 const reportData = {
                     reportId: reportId,
                     serviceNames: serviceNames,
                     finalReportRank: finalReportRank,
                     clients: clients,
-                    executorId: executorId, // ID Normalizado
-                    supportIds: supportIds, // IDs Normalizados
+                    executorId: executorId, 
+                    supportIds: supportIds, 
                     description: description,
                     proofId: proofId, 
                     timestamp: new Date().toISOString()
                 };
                 batch.set(doc(db, COLLECTIONS.REPORTS, reportId), reportData);
 
-                // 2. Atualiza os Pontos e Contagem de Missões do Executor (Guardião)
-                const ninjaRef = doc(db, COLLECTIONS.NINJAS, executorId); // Usa ID Normalizado
+                const ninjaRef = doc(db, COLLECTIONS.NINJAS, executorId); 
                 const currentNinjaData = ninjasData[executorId] || { rankPoints: 0, missionsCompleted: 0 };
                 
-                // O Executor recebe TODOS os pontos do relatório (pointsToAward)
                 batch.set(ninjaRef, {
                     rankPoints: currentNinjaData.rankPoints + pointsToAward,
                     missionsCompleted: currentNinjaData.missionsCompleted + serviceNames.length, 
@@ -1188,15 +1281,13 @@
                     isActive: true
                 }, { merge: true });
                 
-                // 3. Rastreamento e PONTUAÇÃO de Auxílio (Log de Prospectos)
                 const currentTime = new Date().toISOString();
                 for (const supportId of supportIds) {
-                    const auxRef = doc(db, COLLECTIONS.AUXILIARY_LOG, supportId); // Usa ID Normalizado
+                    const auxRef = doc(db, COLLECTIONS.AUXILIARY_LOG, supportId); 
                     const currentAuxData = auxiliaryData[supportId] || { rankPoints: 0 };
 
-                    // O auxiliar acumula a mesma pontuação
                     batch.set(auxRef, {
-                        id: supportId, // Armazena ID Normalizado
+                        id: supportId, 
                         lastParticipation: currentTime,
                         rankPoints: (currentAuxData.rankPoints || 0) + pointsToAward
                     }, { merge: true });
@@ -1204,7 +1295,6 @@
 
                 await batch.commit();
 
-                // Limpar e preparar para o próximo relatório
                 document.querySelectorAll('#report-form-section input[type="text"]').forEach(input => {
                     if (input.id !== 'proof-id') input.value = '';
                 });
@@ -1216,15 +1306,12 @@
                 
                 document.getElementById('missions-entry-container').innerHTML = '';
                 addMissionEntry();
-                generateProofId(); // Gera um novo ID ÚNICO para a próxima missão
+                generateProofId(); 
 
-                // Confirmação de sucesso
                 document.getElementById('status').textContent = `✅ Sucesso! Relatório "${reportId}" registrado. ${pointsToAward} pontos adicionados a ${executorId}.`;
                 document.getElementById('status').className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
                 setTimeout(() => document.getElementById('status').classList.add('hidden'), 7000);
                 
-                console.log(`Relatório "${reportId}" registrado com sucesso! Pontos de Rank atualizados!`);
-
             } catch (error) {
                 console.error("Erro ao registrar relatório e atualizar ranking:", error);
                  document.getElementById('status').textContent = `❌ Erro fatal ao registrar: ${error.message}`;
@@ -1238,7 +1325,6 @@
         document.addEventListener('DOMContentLoaded', () => {
             initializeFirebase();
             
-            // Expondo as funções para serem acessíveis pelo HTML
             window.updateDescriptionPreview = updateDescriptionPreview;
             window.addMissionEntry = addMissionEntry;
             window.editMission = editMission;
@@ -1246,6 +1332,10 @@
             window.addNinja = addNinja;
             window.deleteNinja = deleteNinja;
             window.editNinja = editNinja;
+            window.checkAdminKey = checkAdminKey;
+
+            // Inicializa a UI no modo Leitura (oculta os botões de Admin)
+            window.toggleAdminUI(false); 
 
             // Adicionar listeners para inputs
             document.getElementById('executor-id').addEventListener('change', window.updateDescriptionPreview);
@@ -1253,6 +1343,7 @@
             document.getElementById('mission-details').addEventListener('input', window.updateDescriptionPreview);
             document.getElementById('support-ids').addEventListener('input', window.updateDescriptionPreview);
             document.getElementById('add-mission-btn').addEventListener('click', window.addMissionEntry);
+            document.getElementById('set-admin-key').addEventListener('click', window.checkAdminKey);
         });
     </script>
 </body>
