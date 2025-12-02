@@ -255,7 +255,144 @@
         }
 
         
-        // --- FUNÇÕES DE LÓGICA DO FORMULÁRIO (População de Selects) ---
+        // --- FUNÇÕES DE LÓGICA DO FORMULÁRIO (População de Selects, Pontos e Preview) ---
+        
+        // Implementação: Gera o ID Único do Relatório
+        window.generateReportId = function() {
+            const reportIdElement = document.getElementById('report-id-display');
+            if (!reportIdElement) return;
+
+            const now = new Date();
+            const datePart = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+            // Gera uma string UUID curta (apenas 8 caracteres)
+            const uuidPart = crypto.randomUUID().substring(0, 8);
+            currentReportId = `RPT-${datePart}-${uuidPart}`;
+            reportIdElement.value = currentReportId;
+            console.log(`ID do Relatório gerado: ${currentReportId}`);
+        }
+
+        // Implementação: Calcula o total de pontos e habilita o botão de submit
+        window.calculateTotalPoints = function() {
+            const container = document.getElementById('missions-entry-container');
+            const totalPointsInput = document.getElementById('total-points');
+            const submitBtn = document.getElementById('submit-report');
+            if (!container || !totalPointsInput || !submitBtn) return;
+
+            let totalPoints = 0;
+            let missionCount = 0;
+
+            // Iterar sobre todos os selects de missão e somar os pontos dos selecionados
+            const missionSelects = container.querySelectorAll('.mission-select');
+            missionSelects.forEach(select => {
+                const selectedOption = select.options[select.selectedIndex];
+                if (selectedOption && selectedOption.value) {
+                    const points = parseInt(selectedOption.getAttribute('data-points') || '0', 10);
+                    totalPoints += points;
+                    missionCount++;
+                }
+            });
+
+            totalPointsInput.value = totalPoints;
+
+            // Habilita o botão de submissão se houver pelo menos 1 executor e 1 missão
+            const hasExecutors = selectedExecutors.length > 0;
+            const isReady = hasExecutors && missionCount > 0 && totalPoints > 0; // Adicionando totalPoints > 0 como condição para missions que pontuam
+            submitBtn.disabled = !isReady;
+            
+            if (isReady) {
+                 submitBtn.classList.remove('bg-blue-600/50', 'cursor-not-allowed');
+                 submitBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+            } else {
+                 submitBtn.classList.add('bg-blue-600/50', 'cursor-not-allowed');
+                 submitBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            }
+        }
+        
+        // Implementação: Atualiza o preview da descrição
+        window.updateDescriptionPreview = function() {
+            const previewDiv = document.getElementById('description-preview');
+            const detailsInput = document.getElementById('mission-details');
+            const clientsInput = document.getElementById('clients');
+            const supportInput = document.getElementById('support-ids');
+            
+            if (!previewDiv || !detailsInput || !clientsInput || !supportInput) return;
+
+            const details = detailsInput.value.trim();
+            const clients = clientsInput.value.trim();
+            const support = supportInput.value.trim();
+            
+            const missionNames = Array.from(document.querySelectorAll('#missions-entry-container .mission-select'))
+                                    .map(select => select.value)
+                                    .filter(name => name);
+            
+            let previewText = '';
+
+            if (missionNames.length > 0) {
+                previewText += `Missões Concluídas: ${missionNames.join(', ')}. `;
+            } else {
+                previewText += `[Nenhuma missão selecionada]. `;
+            }
+
+            if (details) {
+                previewText += `Detalhes: ${details}. `;
+            }
+
+            if (clients) {
+                previewText += `Cliente(s): ${clients}. `;
+            }
+
+            if (support) {
+                previewText += `Auxílio: ${support}. `;
+            }
+
+            if (selectedExecutors.length > 0) {
+                previewText += `Executor(es): ${selectedExecutors.join(', ')}. `;
+            } else {
+                 previewText += `[Nenhum executor selecionado]. `;
+            }
+
+            previewDiv.textContent = previewText.trim();
+            
+            // Atualiza a contagem de pontos e o status do botão
+            window.calculateTotalPoints();
+        }
+
+        // Implementação: Submete o formulário (simulação)
+        window.submitReport = function() {
+            const totalPointsInput = document.getElementById('total-points');
+            const reportIdElement = document.getElementById('report-id-display');
+            const previewDiv = document.getElementById('description-preview');
+            
+            if (totalPointsInput.value === '0' || selectedExecutors.length === 0) {
+                 window.showCustomModal('Erro', 'O relatório deve ter pelo menos uma missão que pontua e um executor para ser registrado.', false);
+                 return;
+            }
+            
+            const reportSummary = `
+                ID: ${reportIdElement.value}
+                Executores: ${selectedExecutors.join(', ')}
+                Total de Pontos: ${totalPointsInput.value}
+                Descrição: ${previewDiv.textContent}
+                ---
+                Pronto para simular o envio para o Firebase!
+            `;
+            
+            // Aqui seria o local para chamar a função de escrita do Firebase (addDoc / setDoc)
+            // await addDoc(collection(db, COLLECTIONS.REPORTS), reportObject);
+            
+            window.showCustomModal('Registro Simulado (SUCESSO)', reportSummary, false);
+            
+            // Resetar o formulário para simular a conclusão
+            selectedExecutors = [];
+            window.updateExecutorTags();
+            document.getElementById('missions-entry-container').innerHTML = ''; // Limpa as entradas de missão
+            window.addMissionEntry(null, false); // Adiciona a primeira linha vazia novamente
+            window.generateReportId();
+            document.getElementById('clients').value = '';
+            document.getElementById('support-ids').value = '';
+            document.getElementById('mission-details').value = '';
+            window.updateDescriptionPreview(); 
+        }
 
         window.updateExecutorSelect = function() {
             const select = document.getElementById('new-executor-id-select');
@@ -295,8 +432,8 @@
             });
             
             if (resetMissionEntries) {
-                // (Stub) Lógica futura para recalcular pontos ou adicionar entradas vazias
-                // window.calculateTotalPoints();
+                // Ao mudar uma missão, atualiza o preview/pontos
+                window.updateDescriptionPreview();
             }
         }
 
@@ -349,7 +486,8 @@
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 100 2h2a1 1 0 100-2h-2z" clip-rule="evenodd" /></svg>
                         </button>
                     </div>
-                    <select id="mission-select-${entryId}" class="mission-select w-full p-2.5 rounded-lg bg-gray-800 border border-gray-600 text-white" onchange="window.updateMissionSelects(true)">
+                    <!-- CORREÇÃO: Adicionado onchange para atualizar o Preview/Pontos -->
+                    <select id="mission-select-${entryId}" class="mission-select w-full p-2.5 rounded-lg bg-gray-800 border border-gray-600 text-white" onchange="window.updateDescriptionPreview()">
                         <!-- Options preenchidas por updateMissionSelects -->
                     </select>
                     <!-- Campos adicionais de modificação aqui (se necessários) -->
@@ -372,7 +510,8 @@
             const element = document.getElementById(`mission-entry-${entryId}`);
             if (element) {
                 element.remove();
-                // window.calculateTotalPoints(); // Needs implementation
+                // CORREÇÃO: Atualiza o preview e pontos após remover a entrada
+                window.updateDescriptionPreview();
             }
         }
         
@@ -386,6 +525,7 @@
                 selectedExecutors.push(ninjaId);
                 select.value = ''; // Reseta o select
                 window.updateExecutorTags();
+                window.updateDescriptionPreview(); // CORREÇÃO: Atualiza o preview e status do botão
                 console.log(`Executor adicionado: ${ninjaId}`);
             } else {
                  console.warn(`Executor '${ninjaId}' já está na lista.`);
@@ -395,6 +535,7 @@
         window.removeExecutor = function(ninjaId) {
             selectedExecutors = selectedExecutors.filter(id => id !== ninjaId);
             window.updateExecutorTags();
+            window.updateDescriptionPreview(); // CORREÇÃO: Atualiza o preview e status do botão
              console.log(`Executor removido: ${ninjaId}`);
         }
 
@@ -427,8 +568,6 @@
             noMessage.classList.add('hidden');
         }
         
-        window.generateReportId = function() { console.log("generateReportId called (stub)"); }
-        window.updateDescriptionPreview = function() { console.log("updateDescriptionPreview called (stub)"); }
         window.copyReportId = function() { 
              const reportIdElement = document.getElementById('report-id-display');
              if (reportIdElement) {
@@ -448,7 +587,6 @@
                 document.body.removeChild(tempInput);
             }
         }
-        window.submitReport = function() { console.log("submitReport called (stub)"); }
         // Fim das Funções de CRUD/Stubs
 
         window.renderScoreboard = function() {
@@ -1134,14 +1272,17 @@
                     window.updateMissionSelects(false); 
                     window.updateExecutorSelect();
                     window.updateExecutorTags(); 
-                    window.generateReportId();
+                    window.generateReportId(); // NOVO: Gera o ID do Relatório
                     // Adiciona um listener para o botão de adicionar executor na primeira renderização da página
                     const addExecutorBtn = document.getElementById('add-executor-btn');
                     if (addExecutorBtn) {
                         addExecutorBtn.onclick = window.addExecutor;
                     }
-                    window.addMissionEntry(null, false); // Adiciona a primeira linha de missão
-                    window.updateDescriptionPreview();
+                    // Limpa e adiciona uma entrada de missão (popula o select)
+                    const missionsContainer = document.getElementById('missions-entry-container');
+                    if (missionsContainer) missionsContainer.innerHTML = ''; 
+                    window.addMissionEntry(null, false); 
+                    window.updateDescriptionPreview(); // NOVO: Atualiza o Preview inicial
                     break;
                 case 'admin_panel':
                     contentDiv.innerHTML = window.renderAutorizacao();
@@ -1237,6 +1378,7 @@
                     <div class="pt-4 space-y-4 border-t border-gray-700/50">
                         <h3 class="text-xl font-medium text-gray-300 flex justify-between items-center">
                             Missões Concluídas Neste Relatório
+                            <!-- CORREÇÃO: onchange agora chama updateDescriptionPreview() -->
                             <button id="add-mission-btn" onclick="window.addMissionEntry(null, true)" class="py-1 px-3 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition duration-200 shadow-md flex items-center gap-1">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" /></svg>
                                 Adicionar Missão
@@ -1266,7 +1408,8 @@
                         </div>
                     </div>
 
-                    <button id="submit-report" class="w-full py-3 mt-4 bg-blue-600 hover:bg-blue-700 rounded-lg font-bold text-white text-lg transition duration-200 shadow-lg shadow-blue-500/50" disabled onclick="window.submitReport()">
+                    <!-- Botão de submissão habilitado/desabilitado pela função calculateTotalPoints -->
+                    <button id="submit-report" class="w-full py-3 mt-4 bg-blue-600/50 rounded-lg font-bold text-white text-lg transition duration-200 shadow-lg shadow-blue-500/50 cursor-not-allowed" disabled onclick="window.submitReport()">
                         Registrar Missão(ões) e Atualizar Ranking
                     </button>
                 </section>
