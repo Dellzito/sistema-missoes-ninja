@@ -116,7 +116,7 @@
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, doc, setDoc, onSnapshot, collection, writeBatch, 
-            updateDoc, getDoc, deleteDoc, getDocs, setLogLevel, addDoc // ADICIONADO addDoc para Logs
+            updateDoc, getDoc, deleteDoc, getDocs, setLogLevel, addDoc 
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // ====================================================================
@@ -145,7 +145,7 @@
         let isMasterAdminMode = false; // Controle de acesso total
         let isWriterMode = false; // Controle de acesso para Criar Relatório / Editar Missões
         let currentPage = 'home';
-        let currentAccessId = 'ANONYMOUS'; // NOVO: Armazena o ID de acesso logado (MASTER_ADMIN, GUARDIAN_1, etc.)
+        let currentAccessId = 'ANONYMOUS'; // Armazena o ID de acesso logado (MASTER_ADMIN, GUARDIAN_1, etc.)
         
         // Firestore instances and IDs
         let app;
@@ -160,7 +160,7 @@
         let ninjasData = {}; 
         let auxiliaryData = {}; 
         let reportsData = []; 
-        let accessKeysData = {}; // NOVO: Cache para IDs/Senhas de Guardiões
+        let accessKeysData = {}; // Cache para IDs/Senhas de Guardiões
         
         // Estrutura de Coleções (Pública)
         const COLLECTIONS = {
@@ -168,8 +168,9 @@
             REPORTS: `artifacts/${appId}/public/data/reports`,
             NINJAS: `artifacts/${appId}/public/data/ninjas`, 
             AUXILIARY_LOG: `artifacts/${appId}/public/data/auxiliary_log`,
-            ACCESS_KEYS: `artifacts/${appId}/public/data/access_keys`, // NOVO
-            AUDIT_LOG: `artifacts/${appId}/public/data/audit_log` // NOVO: Log de Auditoria
+            ACCESS_KEYS: `artifacts/${appId}/public/data/access_keys`, 
+            // Usando uma coleção privada para logs de auditoria, conforme o pedido (somente para o criador/admin)
+            AUDIT_LOG: `artifacts/${appId}/users/audit_user_log/audit_events` 
         };
 
         // Mapeamento de Rank para Pontos e Constantes (Mantidas)
@@ -200,8 +201,8 @@
             try {
                 const logData = {
                     timestamp: new Date().toISOString(),
-                    actorId: currentAccessId, // O ID de acesso que fez o login
-                    userId: userId, // O ID único do usuário no Firebase
+                    actorAccessId: currentAccessId, // O ID de acesso (MASTER_ADMIN, GUARDIAN_1, etc.)
+                    actorUserId: auth.currentUser?.uid || 'anon', // O ID único do usuário no Firebase
                     action: action,
                     details: details,
                     level: isMasterAdminMode ? 'MASTER_ADMIN' : (isWriterMode ? 'WRITER' : 'ANON')
@@ -878,15 +879,14 @@
                             });
                         }
 
-                        statusElement.textContent = `✅ Missão '${newName}' atualizada com sucesso!`;
+                        statusElement.textContent = `✅ Missão '${newName}' atualizada com sucesso! Recalculando Ranks...`;
                         statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
                         
-                        // NOVO PASSO: Informa que o recalculo é necessário para ver os novos pontos no rank
-                         window.openCustomModal(
-                             'Atenção: Recalculo Necessário', 
-                             'Os pontos da missão foram atualizados. Para que essa alteração afete o Rank dos Guardiões (retrotivamente), o Admin Master deve usar o botão "Recalcular Todos os Ranks Agora" na aba Autorização.', 
-                             'info'
-                         );
+                        // NOVO PASSO: Executa o recalculo global para atualizar Ranks, Histórico e Auxílio imediatamente
+                        await window.recalculateAllRanks(true); // Passa true para suprimir o modal de confirmação interna
+                        
+                        statusElement.textContent = `✅ Missão '${newName}' atualizada e Ranks recalculados com sucesso!`;
+                        statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
                         
                      } catch (e) {
                          console.error("Erro ao editar Missão:", e);
@@ -915,18 +915,17 @@
                      
                      try {
                         await deleteDoc(doc(db, COLLECTIONS.MISSIONS, decodedId));
-                        statusElement.textContent = `✅ Missão '${decodedId}' excluída com sucesso!`;
+                        statusElement.textContent = `✅ Missão '${decodedId}' excluída com sucesso! Recalculando Ranks...`;
                         statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
                         
                         // LOG DE AUDITORIA
                         window.logAction('DELETE_MISSION', { missionName: decodedId });
                         
-                         // NOVO PASSO: Informa que o recalculo é necessário para remover os pontos desta missão do rank
-                         window.openCustomModal(
-                             'Atenção: Recalculo Necessário', 
-                             'A missão foi excluída. Para que os pontos desta missão sejam removidos do Rank dos Guardiões (retrotivamente), o Admin Master deve usar o botão "Recalcular Todos os Ranks Agora" na aba Autorização.', 
-                             'info'
-                         );
+                        // NOVO PASSO: Executa o recalculo global para atualizar Ranks, Histórico e Auxílio imediatamente
+                        await window.recalculateAllRanks(true); // Passa true para suprimir o modal de confirmação interna
+                         
+                        statusElement.textContent = `✅ Missão '${decodedId}' excluída e Ranks recalculados com sucesso!`;
+                        statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
                         
                      } catch (e) {
                          console.error("Erro ao excluir Missão:", e);
@@ -1169,28 +1168,37 @@
             }
         }
         
-        // NOVO: Função para recalcular o Rank de todos os Guardiões e Auxiliares (com base nos pontos ATUAIS das missões)
-        window.recalculateAllRanks = async function() {
-            if (!isWriterMode) { // ALTERADO PARA WRITER MODE
-                window.openCustomModal('Acesso Negado', 'Você precisa de permissão de Escritor ou Admin para recalcular os Ranks.', 'info');
+        // NOVO: Função para recalcular o Rank de todos os Guardiões e Auxiliares 
+        // Suprime o modal de confirmação se calledInternally for true
+        window.recalculateAllRanks = async function(calledInternally = false) {
+            if (!isMasterAdminMode) { // ALTERADO PARA MASTER ADMIN
+                window.openCustomModal('Acesso Negado', 'Você precisa de permissão Master Admin para recalcular os Ranks.', 'info');
                 return;
             }
 
-            const confirmed = await window.openCustomModal(
-                'Confirmação de Recálculo Total', 
-                'Tem certeza que deseja RECALCULAR todos os Ranks? Isso irá ZERAR os pontos atuais e recontá-los com base nos valores ATUAIS das missões (do Gerenciamento de Missões).', 
-                'confirm'
-            );
-            
-            if (!confirmed) return;
+            if (!calledInternally) {
+                const confirmed = await window.openCustomModal(
+                    'Confirmação de Recálculo Total', 
+                    'Tem certeza que deseja RECALCULAR todos os Ranks? Isso irá ZERAR os pontos atuais e recontá-los com base nos valores ATUAIS das missões (do Gerenciamento de Missões).', 
+                    'confirm'
+                );
+                
+                if (!confirmed) return;
+            }
+
 
             const statusElement = document.getElementById('status');
-            statusElement.classList.remove('hidden');
-            statusElement.className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
-            statusElement.textContent = `Iniciando Recálculo Global de Ranks... (Fase 1/3: Resetando Totais)`;
+            if (!calledInternally) { // Só mostra o status inicial se for chamado pelo botão
+                statusElement.classList.remove('hidden');
+                statusElement.className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
+                statusElement.textContent = `Iniciando Recálculo Global de Ranks... (Fase 1/3: Resetando Totais)`;
+            }
             
             try {
                 // Fases 1 & 2: Reset e Recálculo em Memória
+                const getRankIndex = (rankClean) => {
+                     return RANK_ORDER.findIndex(prefix => rankClean.startsWith(prefix));
+                };
                 
                 // Cópia em memória para calcular os novos totais
                 const tempNinjas = {}; 
@@ -1201,12 +1209,12 @@
                     tempNinjas[ninja.id] = { ...ninja, rankPoints: 0, missionsCompleted: 0 };
                 });
                 
-                // Inicializa o Auxiliar com 0 pontos para aqueles que existem
                 Object.values(auxiliaryData).forEach(aux => {
                     tempAux[aux.id] = { ...aux, rankPoints: 0 };
                 });
 
-                // Zera todos os pontos no Firebase (Phase 1 Commit)
+                // 1. Zera todos os pontos no Firebase (Phase 1 Commit)
+                // OBS: Esta etapa é redundante se o onSnapshot não estiver totalmente pronto, mas garante consistência.
                 let resetBatch = writeBatch(db);
                 Object.values(ninjasData).forEach(ninja => {
                     const ninjaRef = doc(db, COLLECTIONS.NINJAS, ninja.id);
@@ -1214,33 +1222,50 @@
                 });
                 Object.values(auxiliaryData).forEach(aux => {
                     const auxRef = doc(db, COLLECTIONS.AUXILIARY_LOG, aux.id);
-                    // Aqui, em vez de deletar, zera para manter os IDs de auxílio
                     resetBatch.update(auxRef, { rankPoints: 0 }); 
                 });
                 await resetBatch.commit();
 
 
-                // 3. Recontar Pontos com os VALORES ATUAIS das Missões (Phase 2 Recount)
-                statusElement.textContent = `Fase 2/3: Recalculando pontos de ${reportsData.length} relatórios...`;
+                // 2. Recontar Pontos com os VALORES ATUAIS das Missões (Phase 2 Recount & Update Report Logs)
+                if (!calledInternally) statusElement.textContent = `Fase 2/3: Recalculando pontos de ${reportsData.length} relatórios...`;
+                
+                let applyBatch = writeBatch(db);
                 
                 reportsData.forEach((report) => {
                     let currentReportPoints = 0;
                     let missionCount = 0;
-
-                    // Calcula os pontos do relatório com base nos VALORES ATUAIS em missionsData
+                    let highestRank = '';
+                    
+                    // Recalcula os pontos e rank do relatório
                     report.serviceNames.forEach(missionName => {
                         const mission = missionsData[missionName];
                         if (mission) {
                             currentReportPoints += mission.points;
                             missionCount++;
+                            
+                            const currentRankClean = cleanRankForLookup(mission.baseRank);
+                            const highestRankClean = cleanRankForLookup(highestRank);
+                            const currentIndex = getRankIndex(currentRankClean);
+                            const highestIndex = getRankIndex(highestRankClean);
+                            
+                            if (highestIndex === -1 || currentIndex < highestIndex) {
+                                highestRank = mission.baseRank;
+                            }
                         }
                     });
 
-                    // Aplica os novos pontos aos Executores (NINJAS) no cache temporário
+                    // A. Atualiza o LOG do Relatório com os novos totais (IMPORTANTE!)
+                    const reportRef = doc(db, COLLECTIONS.REPORTS, report.reportId);
+                    applyBatch.update(reportRef, {
+                        totalPointsRaw: currentReportPoints,
+                        finalReportRank: highestRank || 'N/A'
+                    });
+
+                    // B. Aplica os novos pontos aos Executores (NINJAS) no cache temporário
                     if (report.executorIds && currentReportPoints > 0) {
                         report.executorIds.forEach(executorId => {
                              if (!tempNinjas[executorId]) {
-                                 // Cria o ninja temporário se ele não existia no início (deve ser raro, mas seguro)
                                  tempNinjas[executorId] = { id: executorId, isActive: true, rankPoints: 0, missionsCompleted: 0 };
                              }
                              tempNinjas[executorId].rankPoints += currentReportPoints;
@@ -1248,17 +1273,15 @@
                         });
                     }
 
-                    // Aplica os novos pontos aos Auxiliares (AUXILIARY_LOG) no cache temporário
+                    // C. Aplica os novos pontos aos Auxiliares (AUXILIARY_LOG) no cache temporário
                     if (report.supportIds && currentReportPoints > 0) {
                          report.supportIds.forEach(supportId => {
                               if (report.executorIds && report.executorIds.includes(supportId)) return;
                               
                               if (!tempAux[supportId]) {
-                                   // Cria o auxiliar se não existia no início (com a última participação do relatório)
                                    tempAux[supportId] = { id: supportId, rankPoints: 0, lastParticipation: report.timestamp };
                               }
                               tempAux[supportId].rankPoints += currentReportPoints;
-                              // Atualiza a última participação (para auxilio, o timestamp é importante)
                               if (report.timestamp > (tempAux[supportId].lastParticipation || '')) {
                                    tempAux[supportId].lastParticipation = report.timestamp;
                               }
@@ -1266,11 +1289,10 @@
                     }
                 }); 
                 
-                // 4. Aplica os novos totais calculados no Firebase (Phase 3 Commit)
-                statusElement.textContent = `Fase 3/3: Aplicando novos Ranks...`;
-                let applyBatch = writeBatch(db);
+                // 3. Aplica os novos totais calculados no Firebase (Phase 3 Commit)
+                if (!calledInternally) statusElement.textContent = `Fase 3/3: Aplicando novos Ranks...`;
                 
-                // Aplica totais de Ninjas
+                // Aplica totais de Ninjas no batch existente
                 Object.values(tempNinjas).forEach(ninja => {
                     const ninjaRef = doc(db, COLLECTIONS.NINJAS, ninja.id);
                     applyBatch.update(ninjaRef, { 
@@ -1279,30 +1301,35 @@
                     });
                 });
 
-                // Aplica totais de Auxiliares
+                // Aplica totais de Auxiliares no batch existente
                 Object.values(tempAux).forEach(aux => {
                     const auxRef = doc(db, COLLECTIONS.AUXILIARY_LOG, aux.id);
                     applyBatch.set(auxRef, { 
                         id: aux.id,
                         rankPoints: aux.rankPoints,
-                        lastParticipation: aux.lastParticipation // Mantém a última participação
+                        lastParticipation: aux.lastParticipation
                     }, { merge: true });
                 });
 
                 await applyBatch.commit();
                 
-                statusElement.textContent = `✅ Sucesso! Recálculo de Ranks concluído. ${reportsData.length} relatórios processados.`;
-                statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
-                
-                // LOG DE AUDITORIA
-                window.logAction('RECALCULATE_RANKS_GLOBAL', { reportCount: reportsData.length });
+                // Finaliza o status (apenas se for chamado pelo botão)
+                if (!calledInternally) {
+                    statusElement.textContent = `✅ Sucesso! Recálculo de Ranks concluído. ${reportsData.length} relatórios processados.`;
+                    statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
+                    
+                    // LOG DE AUDITORIA
+                    window.logAction('RECALCULATE_RANKS_GLOBAL', { reportCount: reportsData.length });
+                    setTimeout(() => statusElement.classList.add('hidden'), 7000);
+                }
                 
             } catch (e) {
                 console.error("Erro no Recálculo Global:", e);
+                // Finaliza o status com erro
                 statusElement.textContent = `❌ Erro no Recálculo: ${e.message}. Tente novamente.`;
                 statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                setTimeout(() => statusElement.classList.add('hidden'), 7000);
             }
-            setTimeout(() => statusElement.classList.add('hidden'), 7000);
         }
 
         window.renderScoreboard = function() {
@@ -2274,18 +2301,15 @@
                 </section>
 
                 <!-- Master Admin Tools (Recálculo e Exclusão) -->
-                <div id="writer-tools" class="pt-8 space-y-4 writer-only ${isWriterMode ? '' : 'hidden'}">
+                <div id="admin-tools" class="pt-8 space-y-4 admin-only ${isMasterAdminMode ? '' : 'hidden'}">
                     
-                    <h3 class="text-xl font-bold text-blue-400 border-b border-blue-400/50 pb-2">Ferramentas de Recálculo (Escritor/Admin Master)</h3>
+                    <h3 class="text-xl font-bold text-blue-400 border-b border-blue-400/50 pb-2">Ferramentas de Recálculo (Admin Master)</h3>
                     <p class="text-gray-400">Use este botão APÓS alterar os pontos de uma missão no Gerenciamento de Missões para atualizar o Rank de todos os Guardiões de forma retroativa.</p>
                     <button onclick="window.recalculateAllRanks()" class="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 rounded-lg font-bold text-white text-lg transition duration-200">
                         🔄 Recalcular Todos os Ranks Agora
                     </button>
-                </div>
-                
-                <!-- Master Admin Tools (Exclusão) - APENAS ADMIN MASTER -->
-                <div id="admin-tools" class="pt-4 space-y-4 admin-only ${isMasterAdminMode ? '' : 'hidden'}">
-                    <h3 class="text-xl font-bold text-red-500 border-b border-red-500/50 pb-2">Ferramentas de Exclusão (Admin Master)</h3>
+
+                    <h3 class="text-xl font-bold text-red-500 border-b border-red-500/50 pb-2 pt-4">Ferramentas de Exclusão (Admin Master)</h3>
                     <p class="text-gray-400">Use com extrema cautela. A exclusão de logs é IRREVERSÍVEL. A exclusão de relatórios ZERA os Ranks.</p>
                     <div class="flex flex-col sm:flex-row gap-4">
                         <button onclick="window.clearAuxiliaryLog()" class="w-full py-2 px-4 bg-red-700 hover:bg-red-800 rounded-lg font-bold text-white transition duration-200">
@@ -2296,6 +2320,8 @@
                         </button>
                     </div>
                 </div>
+                
+                <!-- O bloco writer-tools original foi removido, as ferramentas estão agora em admin-tools -->
 
                 <!-- 6. BANCO DE DADOS: MISSÕES E RANKS (MASTER ADMIN / WRITER MODE) -->
                 <section class="space-y-4 pt-8">
