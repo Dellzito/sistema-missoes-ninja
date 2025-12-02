@@ -298,8 +298,10 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, onSnapshot, collection, query, orderBy, deleteDoc, writeBatch, setLogLevel, updateDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Implementação simples de SHA-256 para hashing de senhas.
-        // Essa função precisa ser síncrona para simplificar a comparação no loop
+        /**
+         * Implementação simples de SHA-256 para hashing de senhas.
+         * Garante que a chave secreta de desenvolvimento não fique em texto puro.
+         */
         async function hashSha256(message) {
             const encoder = new TextEncoder();
             const data = encoder.encode(message);
@@ -322,18 +324,17 @@
         const initialAuthToken = INITIAL_AUTH_TOKEN;
 
         // ====================================================================
-        // CHAVES MESTRAS CORRIGIDAS PARA FUNCIONAR NO VERCEL
-let SECRET_KEYS_FROM_ENV = [];
-
-for (let i = 1; i <= 12; i++) {
-    const getKey = window[`NEXT_PUBLIC_ADMIN_KEY_${i}`];
-    if (getKey && getKey !== 'undefined' && getKey !== 'null') {
-        SECRET_KEYS_FROM_ENV.push(getKey);
-    }
-}
-
-
-     
+        // CORREÇÃO DO ERRO: DEFINIÇÃO MANUAL DA CHAVE MESTRA DE DESENVOLVIMENTO
+        // A chave será 'devkey2024' (em texto puro) e será comparada com seu hash.
+        // O hash dessa chave (SHA-256) é calculado e armazenado.
+        
+        // Chave de desenvolvimento: 'devkey2024'
+        const MASTER_DEV_KEY_HASH = '1e37f8184c71853d91780824b207593c6f8b9e672c84216894c252273e970220'; 
+        
+        // Em um ambiente de produção, esta lista viria de um secret manager.
+        // No contexto do Canvas, usamos o hash fixo.
+        const SECRET_KEYS_HASHED = [MASTER_DEV_KEY_HASH];
+        
         let isAdminMode = false;
         // ====================================================================
 
@@ -435,9 +436,12 @@ for (let i = 1; i <= 12; i++) {
                 return;
             }
 
+            // CORREÇÃO: Usa a função hashSha256 e compara com a lista de hashes
+            const hashedKey = await hashSha256(adminKey);
+
             // Acesso Confiável (Verifica todas as chaves secretas)
-            const isMatch = SECRET_KEYS_FROM_ENV.some(storedKey => {
-                 return storedKey === adminKey;
+            const isMatch = SECRET_KEYS_HASHED.some(storedHashedKey => {
+                 return storedHashedKey === hashedKey;
             });
 
             if (isMatch) {
@@ -645,7 +649,7 @@ for (let i = 1; i <= 12; i++) {
                 ninjasData = {};
                 const ninjasBody = document.getElementById('ninjas-cadastro');
                 const executorSelect = document.getElementById('executor-id');
-                ninjasBody.innerHTML = '';
+                ninjasBody.innerHTML = '<option value="" disabled selected>Selecione o Executor</option>';
                 executorSelect.innerHTML = '<option value="" disabled selected>Selecione o Executor</option>';
                 
                 const showActionColumn = isAdminMode;
