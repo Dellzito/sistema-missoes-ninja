@@ -1,0 +1,15 @@
+{
+  "build": {
+    "env": {
+      "ADMIN_KEY_1": "@admin_key_1",
+      "ADMIN_KEY_2": "@admin_key_2",
+      "ADMIN_KEY_3": "@admin_key_3",
+      "ADMIN_KEY_4": "@admin_key_4"
+      // Adicione ADMIN_KEY_5 até ADMIN_KEY_12 aqui
+    }
+  },
+  "rewrites": [
+    { "source": "/index.html", "destination": "/index.html" },
+    { "source": "/", "destination": "/index.html" }
+  ]
+}
