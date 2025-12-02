@@ -678,8 +678,71 @@
             }
         }
         
-        window.editMission = function(id, name, rank) { 
-             window.showCustomModal('Ação de Edição', `Função de edição de Missão '${decodeURIComponent(name)}' (${decodeURIComponent(rank)}) acionada. A lógica de back-end ainda não foi implementada, mas a permissão está OK.`, false);
+        // NOVO: IMPLEMENTAÇÃO DE EDIÇÃO DE MISSÃO COM O MODAL
+        window.editMission = function(encodedId, encodedName, encodedRank) { 
+            if (!isWriterMode) {
+                window.showCustomModal('Acesso Negado', 'Você precisa de permissão de Escritor ou Admin para editar missões.', false);
+                return;
+            }
+            
+            const docId = decodeURIComponent(encodedId);
+            const currentName = decodeURIComponent(encodedName);
+            const currentRank = decodeURIComponent(encodedRank);
+            
+            window.showCustomModal('Editar Missão', 'Altere o nome e o rank da missão abaixo. Confirme para salvar no Firebase.', true, async (confirmed) => {
+                 if (confirmed) {
+                     const newName = document.getElementById('modal-input-1').value.trim();
+                     const newRank = document.getElementById('modal-input-2').value;
+                     const statusElement = document.getElementById('status');
+                     
+                     if (!newName || !newRank) {
+                         statusElement.textContent = '❌ Nome e Rank não podem ser vazios.';
+                         statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                         setTimeout(() => statusElement.classList.add('hidden'), 5000);
+                         return;
+                     }
+                     
+                     statusElement.classList.remove('hidden');
+                     statusElement.className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
+                     statusElement.textContent = `Atualizando Missão '${currentName}' para '${newName}'...`;
+                     
+                     try {
+                        const cleanRank = cleanRankForLookup(newRank);
+                        const points = RANK_POINTS[cleanRank] || 0;
+                        
+                        // Se o nome mudou, deletamos o antigo e criamos o novo
+                        if (newName !== currentName) {
+                            if (missionsData[newName]) {
+                                throw new Error(`Missão '${newName}' já existe.`);
+                            }
+                            await deleteDoc(doc(db, COLLECTIONS.MISSIONS, currentName));
+                            
+                            // Cria a nova missão com o novo nome como ID
+                             await setDoc(doc(db, COLLECTIONS.MISSIONS, newName), {
+                                name: newName,
+                                baseRank: newRank,
+                                points: points,
+                                id: newName
+                            });
+                        } else {
+                            // Se o nome é o mesmo, apenas atualiza os campos restantes
+                             await updateDoc(doc(db, COLLECTIONS.MISSIONS, currentName), {
+                                baseRank: newRank,
+                                points: points
+                            });
+                        }
+
+                        statusElement.textContent = `✅ Missão '${newName}' atualizada com sucesso!`;
+                        statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
+                     } catch (e) {
+                         console.error("Erro ao editar Missão:", e);
+                         statusElement.textContent = `❌ Erro ao editar Missão: ${e.message}`;
+                         statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                     }
+                      setTimeout(() => statusElement.classList.add('hidden'), 7000);
+                     
+                 }
+            }, 'input', { name: currentName, rank: currentRank });
         }
         
         // IMPLEMENTAÇÃO DE DELETE MISSION
@@ -727,7 +790,7 @@
                         </button>
                     </div>
                     <!-- CORREÇÃO: Adicionado onchange para atualizar o Preview/Pontos -->
-                    <select id="mission-select-${entryId}" class="mission-select w-full p-2.5 rounded-lg bg-gray-800 border border-gray-600 text-white" onchange="window.updateDescriptionPreview()">
+                    <select id="mission-select-${entryId}" class="mission-select w-full p-2.5 rounded-lg bg-gray-800 border border-gray-600 text-white" onchange="window.updateDescriptionPreview()" data-entry-id="${entryId}">
                         <!-- Options preenchidas por updateMissionSelects -->
                     </select>
                     <!-- Campos adicionais de modificação aqui (se necessários) -->
