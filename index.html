@@ -182,6 +182,315 @@
         setLogLevel('debug'); 
 
         // ====================================================================
+        // FUNÇÕES DE UTILIDADE E RENDERIZAÇÃO DE DADOS (Movidas para cima)
+        // ====================================================================
+        
+        function getRankIcon(rank) {
+            if (rank === 1) return '🥇';
+            if (rank === 2) return '🥈';
+            if (rank === 3) return '🥉';
+            return `#${rank}`;
+        }
+        function getRankColor(rank) {
+            if (rank.includes('S')) return 'text-red-500';
+            if (rank.includes('A')) return 'text-orange-500';
+            if (rank.includes('B')) return 'text-yellow-500';
+            if (rank.includes('C')) return 'text-green-500';
+            if (rank.includes('D')) return 'text-blue-500';
+            return 'text-gray-400';
+        }
+        function cleanRankForLookup(rank) {
+            return rank.toUpperCase().replace('-', '').replace('/', '');
+        }
+        function normalizeId(id) {
+            return id.trim().toLowerCase();
+        }
+        // Funções de CRUD (Stubs)
+        window.addNinja = function() { console.log("addNinja called (stub)"); }
+        window.editNinja = function(id) { console.log(`editNinja called for ${id} (stub)`); }
+        window.deleteNinja = function(id) { console.log(`deleteNinja called for ${id} (stub)`); }
+        window.addMission = function() { console.log("addMission called (stub)"); }
+        window.editMission = function(id, name, rank) { console.log(`editMission called for ${id} (stub)`); }
+        window.deleteMission = function(id) { console.log(`deleteMission called for ${id} (stub)`); }
+        window.updateMissionSelects = function() { console.log("updateMissionSelects called (stub)"); }
+        window.updateExecutorSelect = function() { console.log("updateExecutorSelect called (stub)"); }
+        window.updateExecutorTags = function() { console.log("updateExecutorTags called (stub)"); }
+        window.generateReportId = function() { console.log("generateReportId called (stub)"); }
+        window.addMissionEntry = function() { console.log("addMissionEntry called (stub)"); }
+        window.updateDescriptionPreview = function() { console.log("updateDescriptionPreview called (stub)"); }
+        window.copyReportId = function() { console.log("copyReportId called (stub)"); }
+        window.submitReport = function() { console.log("submitReport called (stub)"); }
+
+        window.renderScoreboard = function() {
+            const scoreboardBody = document.getElementById('ninjas-scoreboard');
+            if (!scoreboardBody) return; 
+            
+            const guardians = Object.values(ninjasData).filter(n => n.isActive); 
+            guardians.sort((a, b) => b.rankPoints - a.rankPoints);
+            
+            scoreboardBody.innerHTML = '';
+
+            guardians.forEach((ninja, index) => {
+                const rankIcon = getRankIcon(index + 1);
+                scoreboardBody.innerHTML += `
+                    <tr class="hover:bg-gray-700/50">
+                        <td class="px-6 py-2 whitespace-nowrap text-sm font-bold text-center">${rankIcon}</td>
+                        <td class="px-6 py-2 whitespace-nowrap text-sm font-medium text-blue-300">${ninja.id}</td>
+                        <td class="px-6 py-2 whitespace-nowrap text-sm font-bold text-green-400">${Math.round(ninja.rankPoints)} Pts</td>
+                        <td class="px-6 py-2 whitespace-nowrap text-sm text-gray-300">${ninja.missionsCompleted || 0}</td>
+                    </tr>
+                `;
+            });
+        }
+        
+        window.renderAuxiliaryData = function() {
+            const auxiliaryLogBody = document.getElementById('auxiliary-log');
+            if (!auxiliaryLogBody) return;
+            
+            const sortedAuxiliaries = Object.values(auxiliaryData).sort((a, b) => b.rankPoints - a.rankPoints);
+            
+            auxiliaryLogBody.innerHTML = '';
+            
+            sortedAuxiliaries.forEach(data => {
+                const lastParticipation = data.lastParticipation ? new Date(data.lastParticipation).toLocaleDateString('pt-BR') : 'N/A';
+                
+                auxiliaryLogBody.innerHTML += `
+                    <tr class="hover:bg-gray-700/50">
+                        <td class="px-6 py-2 whitespace-nowrap text-sm font-medium text-orange-300">${data.id}</td>
+                        <td class="px-6 py-2 whitespace-nowrap text-sm text-gray-400">${lastParticipation}</td>
+                        <td class="px-6 py-2 whitespace-nowrap text-sm font-semibold text-green-400">${Math.round(data.rankPoints || 0)} Pts</td>
+                    </tr>
+                `;
+            });
+        }
+
+        window.renderReportsLog = function() {
+            window.renderReportsLogFiltered(null, 'reports-log');
+        }
+
+        window.renderNinjasTable = function() {
+            const ninjasBody = document.getElementById('ninjas-cadastro');
+            if (!ninjasBody) return; 
+            
+            const showActionColumn = isMasterAdminMode;
+
+            const actionHeader = ninjasBody.closest('table').querySelector('th.admin-only');
+            if (actionHeader) {
+                if (showActionColumn) actionHeader.classList.remove('hidden');
+                else actionHeader.classList.add('hidden');
+            }
+
+            const sortedNinjas = Object.values(ninjasData).sort((a, b) => a.id.localeCompare(b.id));
+            
+            ninjasBody.innerHTML = '';
+
+            sortedNinjas.forEach(data => {
+                
+                const statusClass = data.isActive ? 'text-green-400' : 'text-red-400';
+                const statusText = data.isActive ? 'Ativo' : 'Inativo';
+                
+                const actionCell = showActionColumn ? `
+                    <td class="px-6 py-2 whitespace-nowrap text-right text-sm font-medium">
+                        <button onclick="window.editNinja('${data.id}')" class="text-blue-500 hover:text-blue-700 transition duration-150 edit-btn mr-2">Editar Status</button>
+                        <button onclick="window.deleteNinja('${data.id}')" class="text-red-500 hover:text-red-700 transition duration-150">Excluir</button>
+                    </td>
+                ` : '';
+
+                ninjasBody.innerHTML += `
+                    <tr class="hover:bg-gray-700/50">
+                        <td class="px-6 py-2 whitespace-nowrap text-sm font-medium text-white">${data.id}</td>
+                        <td class="px-6 py-2 whitespace-nowrap text-sm ${statusClass}">${statusText}</td>
+                        ${actionCell}
+                    </tr>
+                `;
+            });
+            
+            if (document.getElementById('add-ninja-form')) {
+                if (isMasterAdminMode) {
+                    document.getElementById('add-ninja-form').classList.remove('hidden');
+                } else {
+                    document.getElementById('add-ninja-form').classList.add('hidden');
+                }
+            }
+        }
+        
+        window.renderMissionsDatabase = function() {
+            const missionsBody = document.getElementById('missions-database');
+            if (!missionsBody) return; 
+            
+            missionsBody.innerHTML = '';
+            
+            const showActionColumn = isWriterMode; // Ação de Quests liberada para Escritor/Admin
+            const sortedMissions = Object.values(missionsData).sort((a, b) => a.name.localeCompare(b.name));
+
+            const actionHeader = missionsBody.closest('table').querySelector('th.writer-only');
+            if (actionHeader) {
+                if (showActionColumn) actionHeader.classList.remove('hidden');
+                else actionHeader.classList.add('hidden');
+            }
+            
+            if (document.getElementById('add-mission-form')) {
+                if (isWriterMode) {
+                    document.getElementById('add-mission-form').classList.remove('hidden');
+                } else {
+                    document.getElementById('add-mission-form').classList.add('hidden');
+                }
+            }
+
+
+            sortedMissions.forEach(data => {
+                const encodedId = encodeURIComponent(data.id);
+                const encodedName = encodeURIComponent(data.name);
+                const encodedRank = encodeURIComponent(data.baseRank);
+                
+                const actionCell = showActionColumn ? `
+                    <td class="px-6 py-2 whitespace-nowrap text-right text-sm font-medium flex gap-2">
+                        <button onclick="window.editMission('${encodedId}', '${encodedName}', '${encodedRank}')" class="text-blue-500 hover:text-blue-700 transition duration-150 edit-btn">Editar</button>
+                        <button onclick="window.deleteMission('${encodedId}')" class="text-red-500 hover:text-red-700 transition duration-150 remove-btn">Excluir</button>
+                    </td>
+                ` : '';
+
+                missionsBody.innerHTML += `
+                    <tr class="hover:bg-gray-700/50">
+                        <td class="px-6 py-2 whitespace-nowrap text-sm font-medium text-white">${data.name}</td>
+                        <td class="px-6 py-2 whitespace-nowrap text-sm text-yellow-400 font-semibold">${data.baseRank.replace('-Rank', '')}</td>
+                        <td class="px-6 py-2 whitespace-nowrap text-sm text-green-400">${data.points}</td>
+                        ${actionCell}
+                    </tr>
+                `;
+            });
+        }
+
+        window.renderReportsLogFiltered = function(filterId = null, targetId = 'filtered-reports-log') {
+            
+            const reportsLog = document.getElementById(targetId);
+            const guardianSummaryDiv = document.getElementById('guardian-summary');
+
+            if (!reportsLog) return;
+            
+            reportsLog.innerHTML = '';
+            let filteredReports = reportsData;
+
+            if (filterId) {
+                // Filtra relatórios onde o ID está como executor OU auxiliar
+                filteredReports = reportsData.filter(report => {
+                    const isExecutor = Array.isArray(report.executorIds) && report.executorIds.includes(filterId);
+                    const isAuxiliary = Array.isArray(report.supportIds) && report.supportIds.includes(filterId);
+                    return isExecutor || isAuxiliary;
+                });
+            }
+            
+            // Exibe o resumo do Ninja/Auxiliar se o filtro estiver ativo
+            if (filterId && guardianSummaryDiv) {
+                const ninjaData = ninjasData[filterId];
+                const auxData = auxiliaryData[filterId];
+                const isGuardian = !!ninjaData;
+                
+                let points = 0;
+                let missions = 0;
+                let type = 'ID Inativo';
+
+                if (isGuardian) {
+                    points = Math.round(ninjaData.rankPoints);
+                    missions = ninjaData.missionsCompleted;
+                    type = ninjaData.isActive ? 'Guardião Ativo' : 'Guardião Inativo';
+                } else if (auxData) {
+                    points = Math.round(auxData.rankPoints);
+                    // Conta o número de relatórios em que o auxiliar participou
+                    missions = reportsData.filter(r => r.supportIds && r.supportIds.includes(filterId)).length;
+                    type = 'Auxiliar';
+                }
+
+                guardianSummaryDiv.innerHTML = `
+                    <p class="text-xl font-bold text-yellow-400">${filterId.toUpperCase()}</p>
+                    <p class="text-sm text-gray-300">${type}</p>
+                    <p class="text-lg text-green-400">Total de Pontos: ${points} Pts</p>
+                    <p class="text-gray-300">Total de Relatórios Envolvidos: ${missions}</p>
+                `;
+                guardianSummaryDiv.classList.remove('hidden');
+            } else if (guardianSummaryDiv) {
+                guardianSummaryDiv.classList.add('hidden');
+            }
+
+
+            const sortedReports = filteredReports.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+            if (sortedReports.length === 0) {
+                 reportsLog.innerHTML = `<tr><td colspan="6" class="px-4 py-4 text-center italic text-gray-500">Nenhum relatório encontrado${filterId ? ` para o Ninja/Auxiliar "${filterId}"` : ''}.</td></tr>`;
+                 return;
+            }
+
+            sortedReports.forEach(data => {
+                const rankClass = data.finalReportRank ? getRankColor(data.finalReportRank) : 'text-gray-400';
+                
+                const formattedDate = new Date(data.timestamp).toLocaleDateString('pt-BR', {
+                    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                });
+                
+                const servicesList = data.serviceNames.map(name => 
+                    `<span class="text-xs text-gray-400 block">${name}</span>`
+                ).join('');
+                
+                const executorsText = Array.isArray(data.executorIds) ? data.executorIds.join(', ') : data.executorId;
+                const finalRankDisplay = data.finalReportRank ? `(Rank ${data.finalReportRank.replace('-Rank', '')})` : '(N/A)';
+                
+                // Determina o papel do Ninja/Auxiliar para a tabela filtrada
+                let role = '';
+                if (filterId) {
+                    const isExecutor = Array.isArray(data.executorIds) && data.executorIds.includes(filterId);
+                    const isAuxiliary = Array.isArray(data.supportIds) && data.supportIds.includes(filterId);
+                    if (isExecutor && isAuxiliary) role = 'Executor & Auxílio';
+                    else if (isExecutor) role = 'Executor';
+                    else if (isAuxiliary) role = 'Auxílio';
+                }
+                
+                // Escolhe o target body correto (reports-log ou filtered-reports-log)
+                const targetBody = document.getElementById(targetId);
+
+                if (targetId === 'filtered-reports-log') {
+                     // Renderiza a tabela do Painel de Ninjas
+                     targetBody.innerHTML += `
+                         <tr class="hover:bg-gray-700/50">
+                             <td class="px-4 py-2 whitespace-nowrap text-xs text-gray-400 truncate w-1/12">${data.reportId}</td>
+                             <td class="px-4 py-2 whitespace-normal text-sm text-white w-2/12">
+                                 ${servicesList}
+                                 <span class="text-sm ${rankClass} font-bold mt-1 block">${finalRankDisplay}</span>
+                             </td>
+                             <td class="px-4 py-2 whitespace-normal text-sm text-white w-2/12">
+                                 <span class="font-bold text-yellow-300">${role}</span>
+                             </td>
+                             <td class="px-4 py-2 whitespace-normal text-sm text-green-400 w-2/12">${data.totalPointsRaw} Pts</td>
+                             <td class="px-4 py-2 whitespace-normal text-sm italic text-gray-400 w-4/12">${data.description}</td>
+                             <td class="px-4 py-2 whitespace-nowrap text-sm w-1/12">
+                                 <span class="font-mono text-gray-400 text-xs">${formattedDate}</span>
+                             </td>
+                         </tr>
+                     `;
+                } else {
+                    // Renderiza a tabela Histórico Completo
+                    targetBody.innerHTML += `
+                        <tr class="hover:bg-gray-700/50">
+                            <td class="px-4 py-2 whitespace-nowrap text-xs text-gray-400 truncate w-1/12">${data.reportId}</td>
+                            <td class="px-4 py-2 whitespace-normal text-sm text-white w-2/12">
+                                ${servicesList}
+                                <span class="text-sm ${rankClass} font-bold mt-1 block">${finalRankDisplay}</span>
+                            </td>
+                            <td class="px-4 py-2 whitespace-normal text-sm text-white w-2/12">
+                                <span class="font-bold text-blue-300">${executorsText}</span><br>
+                                ${data.supportIds && data.supportIds.length > 0 ? `<span class="text-xs text-gray-400">Auxílio: ${data.supportIds.join(', ')}</span>` : '<span class="text-xs text-gray-500">Sem auxílio</span>'}
+                            </td>
+                            <td class="px-4 py-2 whitespace-normal text-sm text-gray-300 w-2/12">${data.clients.join(', ')}</td>
+                            <td class="px-4 py-2 whitespace-normal text-sm italic text-gray-400 w-3/12">${data.description}</td>
+                            <td class="px-4 py-2 whitespace-nowrap text-sm w-1/12">
+                                <span class="font-mono text-gray-400 text-xs">${formattedDate}</span>
+                            </td>
+                        </tr>
+                    `;
+                }
+            });
+        }
+
+        // ====================================================================
         // FUNÇÕES DE PERSISTÊNCIA E INICIALIZAÇÃO (FIREBASE)
         // ====================================================================
 
@@ -217,12 +526,15 @@
             if (!db) return;
 
             // 0. Chaves de Acesso (Nova Coleção)
+            // Tenta se inscrever, mas lida com o erro de permissão silenciosamente.
             onSnapshot(collection(db, COLLECTIONS.ACCESS_KEYS), (snapshot) => {
                 accessKeysData = {};
                 snapshot.forEach(doc => {
                     const data = doc.data();
                     accessKeysData[doc.id] = data; 
                 });
+            }, (error) => { 
+                console.warn("@firebase/firestore: Permissão negada para ACCESS_KEYS (normal para usuários anônimos):", error.message);
             });
 
             // 1. Missões / Quests
@@ -236,11 +548,12 @@
                      seedInitialData(db);
                 }
                 if (['report_form', 'admin_panel'].includes(currentPage)) {
-                    // Se estivermos na página de Admin, re-renderiza as missões
                     window.renderMissionsDatabase && window.renderMissionsDatabase();
                 } else {
-                     window.updateMissionSelects && window.updateMissionSelects(false); // Atualiza os selects
+                     window.updateMissionSelects && window.updateMissionSelects(false); 
                 }
+            }, (error) => {
+                console.warn("@firebase/firestore: Permissão negada para MISSIONS (normal para usuários anônimos):", error.message);
             });
 
             // 2. Ninjas / Cadastro e Scoreboard
@@ -252,11 +565,12 @@
                     ninjasData[data.id] = data;
                 });
                 if (['report_form', 'scoreboard', 'ninja_panel'].includes(currentPage)) {
-                    // Re-renderiza as páginas que usam dados de ninjas
                     window.renderPage(currentPage);
                 } else if (currentPage === 'admin_panel') {
                      window.renderNinjasTable && window.renderNinjasTable();
                 }
+            }, (error) => {
+                console.warn("@firebase/firestore: Permissão negada para NINJAS (normal para usuários anônimos):", error.message);
             });
             
             // 3. Log de Auxílio
@@ -267,9 +581,10 @@
                     auxiliaryData[doc.id] = data;
                 });
                 if (['auxiliary_log', 'ninja_panel'].includes(currentPage)) {
-                    // CORREÇÃO: Chama a função de renderização de dados separada
                     window.renderAuxiliaryData && window.renderAuxiliaryData(); 
                 }
+            }, (error) => {
+                console.warn("@firebase/firestore: Permissão negada para AUXILIARY_LOG (normal para usuários anônimos):", error.message);
             });
 
             // 4. Relatórios / Logs
@@ -277,12 +592,14 @@
                 reportsData = [];
                 snapshot.forEach(doc => reportsData.push(doc.data()));
                 if (['reports_log', 'ninja_panel'].includes(currentPage)) window.renderPage(currentPage);
+            }, (error) => {
+                console.warn("@firebase/firestore: Permissão negada para REPORTS (normal para usuários anônimos):", error.message);
             });
         }
         
         // Simula o seed de dados no Firestore
         async function seedInitialData(db) {
-            // ... (Lógica de seed mantida, mas adaptada para incluir chave mestra de exemplo)
+            // ... (Lógica de seed mantida)
             const newMissionsList = [
                 { name: "Village's Most Wanted", rank: "S-Rank" },
                 { name: "Glacier Bear Hunt", rank: "A-Rank" },
@@ -490,12 +807,10 @@
                     break;
                 case 'auxiliary_log':
                     contentDiv.innerHTML = window.renderAuxilio();
-                    // CORREÇÃO: Chama a função de renderização de dados na tabela
                     window.renderAuxiliaryData(); 
                     break;
                 case 'admin_panel':
                     contentDiv.innerHTML = window.renderAutorizacao();
-                    // CORREÇÃO: Garante que as tabelas sejam preenchidas imediatamente
                     window.renderNinjasTable();
                     window.renderMissionsDatabase();
                     break;
@@ -705,28 +1020,6 @@
             `;
         }
 
-        // Função que preenche a tabela de auxílio (Renomeada para maior clareza)
-        window.renderAuxiliaryData = function() {
-            const auxiliaryLogBody = document.getElementById('auxiliary-log');
-            if (!auxiliaryLogBody) return;
-            
-            const sortedAuxiliaries = Object.values(auxiliaryData).sort((a, b) => b.rankPoints - a.rankPoints);
-            
-            auxiliaryLogBody.innerHTML = '';
-            
-            sortedAuxiliaries.forEach(data => {
-                const lastParticipation = data.lastParticipation ? new Date(data.lastParticipation).toLocaleDateString('pt-BR') : 'N/A';
-                
-                auxiliaryLogBody.innerHTML += `
-                    <tr class="hover:bg-gray-700/50">
-                        <td class="px-6 py-2 whitespace-nowrap text-sm font-medium text-orange-300">${data.id}</td>
-                        <td class="px-6 py-2 whitespace-nowrap text-sm text-gray-400">${lastParticipation}</td>
-                        <td class="px-6 py-2 whitespace-nowrap text-sm font-semibold text-green-400">${Math.round(data.rankPoints || 0)} Pts</td>
-                    </tr>
-                `;
-            });
-        }
-
         window.renderAutorizacao = function() {
              const accessStatus = isMasterAdminMode ? 
                 `<div class="text-center text-green-400 font-bold text-lg p-2">✅ MASTER ADMIN ATIVO</div>` : 
@@ -820,173 +1113,7 @@
                 </section>
             `;
         }
-
-        window.renderReportsLogFiltered = function(filterId = null, targetId = 'filtered-reports-log') {
-            
-            const reportsLog = document.getElementById(targetId);
-            const guardianSummaryDiv = document.getElementById('guardian-summary');
-
-            if (!reportsLog) return;
-            
-            reportsLog.innerHTML = '';
-            let filteredReports = reportsData;
-
-            if (filterId) {
-                // Filtra relatórios onde o ID está como executor OU auxiliar
-                filteredReports = reportsData.filter(report => {
-                    const isExecutor = Array.isArray(report.executorIds) && report.executorIds.includes(filterId);
-                    const isAuxiliary = Array.isArray(report.supportIds) && report.supportIds.includes(filterId);
-                    return isExecutor || isAuxiliary;
-                });
-            }
-            
-            // Exibe o resumo do Ninja/Auxiliar se o filtro estiver ativo
-            if (filterId && guardianSummaryDiv) {
-                const ninjaData = ninjasData[filterId];
-                const auxData = auxiliaryData[filterId];
-                const isGuardian = !!ninjaData;
-                
-                let points = 0;
-                let missions = 0;
-                let type = 'ID Inativo';
-
-                if (isGuardian) {
-                    points = Math.round(ninjaData.rankPoints);
-                    missions = ninjaData.missionsCompleted;
-                    type = ninjaData.isActive ? 'Guardião Ativo' : 'Guardião Inativo';
-                } else if (auxData) {
-                    points = Math.round(auxData.rankPoints);
-                    // Conta o número de relatórios em que o auxiliar participou
-                    missions = reportsData.filter(r => r.supportIds && r.supportIds.includes(filterId)).length;
-                    type = 'Auxiliar';
-                }
-
-                guardianSummaryDiv.innerHTML = `
-                    <p class="text-xl font-bold text-yellow-400">${filterId.toUpperCase()}</p>
-                    <p class="text-sm text-gray-300">${type}</p>
-                    <p class="text-lg text-green-400">Total de Pontos: ${points} Pts</p>
-                    <p class="text-gray-300">Total de Relatórios Envolvidos: ${missions}</p>
-                `;
-                guardianSummaryDiv.classList.remove('hidden');
-            } else if (guardianSummaryDiv) {
-                guardianSummaryDiv.classList.add('hidden');
-            }
-
-
-            const sortedReports = filteredReports.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-            if (sortedReports.length === 0) {
-                 reportsLog.innerHTML = `<tr><td colspan="6" class="px-4 py-4 text-center italic text-gray-500">Nenhum relatório encontrado${filterId ? ` para o Ninja/Auxiliar "${filterId}"` : ''}.</td></tr>`;
-                 return;
-            }
-
-            sortedReports.forEach(data => {
-                const rankClass = data.finalReportRank ? getRankColor(data.finalReportRank) : 'text-gray-400';
-                
-                const formattedDate = new Date(data.timestamp).toLocaleDateString('pt-BR', {
-                    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
-                });
-                
-                const servicesList = data.serviceNames.map(name => 
-                    `<span class="text-xs text-gray-400 block">${name}</span>`
-                ).join('');
-                
-                const executorsText = Array.isArray(data.executorIds) ? data.executorIds.join(', ') : data.executorId;
-                const finalRankDisplay = data.finalReportRank ? `(Rank ${data.finalReportRank.replace('-Rank', '')})` : '(N/A)';
-                
-                // Determina o papel do Ninja/Auxiliar para a tabela filtrada
-                let role = '';
-                if (filterId) {
-                    const isExecutor = Array.isArray(data.executorIds) && data.executorIds.includes(filterId);
-                    const isAuxiliary = Array.isArray(data.supportIds) && data.supportIds.includes(filterId);
-                    if (isExecutor && isAuxiliary) role = 'Executor & Auxílio';
-                    else if (isExecutor) role = 'Executor';
-                    else if (isAuxiliary) role = 'Auxílio';
-                }
-                
-                // Escolhe o target body correto (reports-log ou filtered-reports-log)
-                const targetBody = document.getElementById(targetId);
-
-                if (targetId === 'filtered-reports-log') {
-                     // Renderiza a tabela do Painel de Ninjas
-                     targetBody.innerHTML += `
-                         <tr class="hover:bg-gray-700/50">
-                             <td class="px-4 py-2 whitespace-nowrap text-xs text-gray-400 truncate w-1/12">${data.reportId}</td>
-                             <td class="px-4 py-2 whitespace-normal text-sm text-white w-2/12">
-                                 ${servicesList}
-                                 <span class="text-sm ${rankClass} font-bold mt-1 block">${finalRankDisplay}</span>
-                             </td>
-                             <td class="px-4 py-2 whitespace-normal text-sm text-white w-2/12">
-                                 <span class="font-bold text-yellow-300">${role}</span>
-                             </td>
-                             <td class="px-4 py-2 whitespace-normal text-sm text-green-400 w-2/12">${data.totalPointsRaw} Pts</td>
-                             <td class="px-4 py-2 whitespace-normal text-sm italic text-gray-400 w-4/12">${data.description}</td>
-                             <td class="px-4 py-2 whitespace-nowrap text-sm w-1/12">
-                                 <span class="font-mono text-gray-400 text-xs">${formattedDate}</span>
-                             </td>
-                         </tr>
-                     `;
-                } else {
-                    // Renderiza a tabela Histórico Completo
-                    targetBody.innerHTML += `
-                        <tr class="hover:bg-gray-700/50">
-                            <td class="px-4 py-2 whitespace-nowrap text-xs text-gray-400 truncate w-1/12">${data.reportId}</td>
-                            <td class="px-4 py-2 whitespace-normal text-sm text-white w-2/12">
-                                ${servicesList}
-                                <span class="text-sm ${rankClass} font-bold mt-1 block">${finalRankDisplay}</span>
-                            </td>
-                            <td class="px-4 py-2 whitespace-normal text-sm text-white w-2/12">
-                                <span class="font-bold text-blue-300">${executorsText}</span><br>
-                                ${data.supportIds && data.supportIds.length > 0 ? `<span class="text-xs text-gray-400">Auxílio: ${data.supportIds.join(', ')}</span>` : '<span class="text-xs text-gray-500">Sem auxílio</span>'}
-                            </td>
-                            <td class="px-4 py-2 whitespace-normal text-sm text-gray-300 w-2/12">${data.clients.join(', ')}</td>
-                            <td class="px-4 py-2 whitespace-normal text-sm italic text-gray-400 w-3/12">${data.description}</td>
-                            <td class="px-4 py-2 whitespace-nowrap text-sm w-1/12">
-                                <span class="font-mono text-gray-400 text-xs">${formattedDate}</span>
-                            </td>
-                        </tr>
-                    `;
-                }
-            });
-        }
         
-        // Funções de utilidade necessárias (presumo que existam, mas não estão no trecho)
-        function getRankIcon(rank) {
-            if (rank === 1) return '🥇';
-            if (rank === 2) return '🥈';
-            if (rank === 3) return '🥉';
-            return `#${rank}`;
-        }
-        function getRankColor(rank) {
-            if (rank.includes('S')) return 'text-red-500';
-            if (rank.includes('A')) return 'text-orange-500';
-            if (rank.includes('B')) return 'text-yellow-500';
-            if (rank.includes('C')) return 'text-green-500';
-            if (rank.includes('D')) return 'text-blue-500';
-            return 'text-gray-400';
-        }
-        function cleanRankForLookup(rank) {
-            return rank.toUpperCase().replace('-', '').replace('/', '');
-        }
-        function normalizeId(id) {
-            return id.trim().toLowerCase();
-        }
-        // Funções de CRUD (adicionei stubs para garantir que o código compile, se faltarem)
-        window.addNinja = function() { console.log("addNinja called (stub)"); }
-        window.editNinja = function(id) { console.log(`editNinja called for ${id} (stub)`); }
-        window.deleteNinja = function(id) { console.log(`deleteNinja called for ${id} (stub)`); }
-        window.addMission = function() { console.log("addMission called (stub)"); }
-        window.editMission = function(id, name, rank) { console.log(`editMission called for ${id} (stub)`); }
-        window.deleteMission = function(id) { console.log(`deleteMission called for ${id} (stub)`); }
-        window.updateMissionSelects = function() { console.log("updateMissionSelects called (stub)"); }
-        window.updateExecutorSelect = function() { console.log("updateExecutorSelect called (stub)"); }
-        window.updateExecutorTags = function() { console.log("updateExecutorTags called (stub)"); }
-        window.generateReportId = function() { console.log("generateReportId called (stub)"); }
-        window.addMissionEntry = function() { console.log("addMissionEntry called (stub)"); }
-        window.updateDescriptionPreview = function() { console.log("updateDescriptionPreview called (stub)"); }
-        window.copyReportId = function() { console.log("copyReportId called (stub)"); }
-        window.submitReport = function() { console.log("submitReport called (stub)"); }
-
         // Start application on load
         window.onload = function() {
             initializeFirebase();
