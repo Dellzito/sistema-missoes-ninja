@@ -258,11 +258,52 @@
         window.addMission = function() { console.log("addMission called (stub)"); }
         window.editMission = function(id, name, rank) { console.log(`editMission called for ${id} (stub)`); }
         window.deleteMission = function(id) { console.log(`deleteMission called for ${id} (stub)`); }
-        // window.updateMissionSelects = function() { console.log("updateMissionSelects called (stub)"); } // REMOVIDO STUB, AGORA É REAL
-        // window.updateExecutorSelect = function() { console.log("updateExecutorSelect called (stub)"); }   // REMOVIDO STUB, AGORA É REAL
+        
+        // NOVO: Adiciona uma entrada de missão ao formulário
+        window.addMissionEntry = function(initialData = null, shouldRecalculate = true) {
+            const container = document.getElementById('missions-entry-container');
+            if (!container) return;
+
+            // Use a timestamp or random ID for temporary tracking of the entry
+            const entryId = initialData ? initialData.id : Date.now();
+
+            const missionEntryHtml = `
+                <div id="mission-entry-${entryId}" class="p-3 bg-gray-700 rounded-lg space-y-2 border border-gray-600">
+                    <div class="flex items-center justify-between">
+                        <label class="text-sm font-medium text-gray-300">Missão #${container.children.length + 1}</label>
+                        <button type="button" onclick="window.removeMissionEntry('${entryId}')" class="text-red-400 hover:text-red-500 transition remove-btn" title="Remover Missão">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 100 2h2a1 1 0 100-2h-2z" clip-rule="evenodd" /></svg>
+                        </button>
+                    </div>
+                    <select id="mission-select-${entryId}" class="mission-select w-full p-2.5 rounded-lg bg-gray-800 border border-gray-600 text-white" onchange="window.updateMissionSelects(true)">
+                        <!-- Options preenchidas por updateMissionSelects -->
+                    </select>
+                    <!-- Campos adicionais de modificação aqui (se necessários) -->
+                </div>
+            `;
+            container.insertAdjacentHTML('beforeend', missionEntryHtml);
+            
+            // Re-popula os selects para incluir as opções no novo campo
+            window.updateMissionSelects(shouldRecalculate);
+            
+            if (initialData && initialData.name) {
+                 document.getElementById(`mission-select-${entryId}`).value = initialData.name;
+            }
+            
+            // window.calculateTotalPoints(); // Needs implementation
+
+        }
+
+        window.removeMissionEntry = function(entryId) {
+            const element = document.getElementById(`mission-entry-${entryId}`);
+            if (element) {
+                element.remove();
+                // window.calculateTotalPoints(); // Needs implementation
+            }
+        }
+
         window.updateExecutorTags = function() { console.log("updateExecutorTags called (stub)"); }
         window.generateReportId = function() { console.log("generateReportId called (stub)"); }
-        window.addMissionEntry = function() { console.log("addMissionEntry called (stub)"); }
         window.updateDescriptionPreview = function() { console.log("updateDescriptionPreview called (stub)"); }
         window.copyReportId = function() { 
              const reportIdElement = document.getElementById('report-id-display');
@@ -275,7 +316,8 @@
                 tempInput.select();
                 try {
                     document.execCommand('copy');
-                    alert('ID do Relatório copiado para a área de transferência: ' + textToCopy);
+                    // Substituindo alert por console.log para evitar bloqueio de iframe
+                    console.log('ID do Relatório copiado para a área de transferência: ' + textToCopy);
                 } catch (err) {
                     console.error('Falha ao copiar:', err);
                 }
@@ -673,7 +715,8 @@
                 });
                 // Garante que o estado de permissão seja atualizado se o login for feito
                 if (currentPage === 'admin_panel' || currentPage === 'report_form') {
-                    window.renderPage(currentPage);
+                    // Chamando renderPage após o carregamento das chaves
+                    window.renderPage(currentPage); 
                 }
             }, (error) => { 
                 console.warn("@firebase/firestore: Permissão negada para ACCESS_KEYS (normal para usuários anônimos):", error.message);
@@ -689,11 +732,10 @@
                 if (Object.keys(missionsData).length === 0) {
                      seedInitialData(db);
                 }
-                if (['report_form', 'admin_panel'].includes(currentPage)) {
-                    // Chamada essencial para popular o select de missões na tela de relatório
-                    window.updateMissionSelects && window.updateMissionSelects(false); 
-                    window.renderMissionsDatabase && window.renderMissionsDatabase();
-                } 
+                // Chamada de atualização direta para garantir a população dos selects
+                window.updateMissionSelects && window.updateMissionSelects(false); 
+                window.renderMissionsDatabase && window.renderMissionsDatabase();
+                
             }, (error) => {
                 console.warn("@firebase/firestore: Permissão negada para MISSIONS (normal para usuários anônimos):", error.message);
             });
@@ -706,9 +748,11 @@
                     data.id = doc.id; 
                     ninjasData[data.id] = data;
                 });
-                if (['report_form', 'scoreboard', 'ninja_panel'].includes(currentPage)) {
-                    // Chamada essencial para popular o select de ninjas na tela de relatório
-                    window.updateExecutorSelect && window.updateExecutorSelect();
+                 // Chamada de atualização direta para garantir a população do select
+                window.updateExecutorSelect && window.updateExecutorSelect();
+                
+                // Força a re-renderização das páginas que dependem desses dados
+                if (['scoreboard', 'ninja_panel'].includes(currentPage)) {
                     window.renderPage(currentPage);
                 } else if (currentPage === 'admin_panel') {
                      window.renderNinjasTable && window.renderNinjasTable();
@@ -881,11 +925,13 @@
                 if (accessData.level === 'master_admin') {
                     window.toggleMasterAdminUI(true);
                     window.toggleWriterUI(true);
-                    statusElement.textContent = `✅ Acesso MASTER LIBERADO. ID: ${id}`;
+                    statusElement.textContent = `✅ Acesso MASTER LIBERADO. ID: ${id}. Funcionalidades de edição e relatório habilitadas.`;
+                    console.log(`[AUTH] Acesso MASTER LIBERADO. isMasterAdminMode: true, isWriterMode: true`);
                 } else if (accessData.level === 'report_writer') {
                     window.toggleWriterUI(true);
                     window.toggleMasterAdminUI(false);
-                    statusElement.textContent = `✅ Acesso ESCRITOR LIBERADO. ID: ${id}`;
+                    statusElement.textContent = `✅ Acesso ESCRITOR LIBERADO. ID: ${id}. Criação de relatórios e gestão de missões habilitadas.`;
+                     console.log(`[AUTH] Acesso ESCRITOR LIBERADO. isMasterAdminMode: false, isWriterMode: true`);
                 } else {
                     statusElement.textContent = '❌ ID/Senha válidos, mas Nível de Acesso não reconhecido.';
                     statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
@@ -957,7 +1003,7 @@
                     window.updateExecutorSelect();
                     window.updateExecutorTags(false); 
                     window.generateReportId();
-                    window.addMissionEntry(null, false); 
+                    window.addMissionEntry(null, false); // Adiciona a primeira linha de missão
                     window.updateDescriptionPreview();
                     break;
                 case 'admin_panel':
@@ -1053,7 +1099,7 @@
                     <div class="pt-4 space-y-4 border-t border-gray-700/50">
                         <h3 class="text-xl font-medium text-gray-300 flex justify-between items-center">
                             Missões Concluídas Neste Relatório
-                            <button id="add-mission-btn" class="py-1 px-3 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition duration-200 shadow-md flex items-center gap-1">
+                            <button id="add-mission-btn" onclick="window.addMissionEntry(null, true)" class="py-1 px-3 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition duration-200 shadow-md flex items-center gap-1">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" /></svg>
                                 Adicionar Missão
                             </button>
