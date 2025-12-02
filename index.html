@@ -899,36 +899,29 @@
 
         window.updateExecutorTags = function() { 
             const container = document.getElementById('executors-tag-container');
-            const noMessage = document.getElementById('no-executor-message');
-            if (!container || !noMessage) return;
-
-            // CORREÇÃO: Garante a remoção completa de todas as tags visuais antes de reconstruir
-            container.querySelectorAll('.executor-tag').forEach(tag => tag.remove());
+            if (!container) return;
             
-            // Lógica para adicionar tags
+            let contentHTML = '';
+
             if (selectedExecutors.length === 0) {
-                // Se não há executores, exibe a mensagem (se ela foi destruída anteriormente, o JS tenta injetar ela de volta)
-                // Usando innerHTML para resetar a área e garantir que a mensagem base esteja lá.
-                container.innerHTML = '<span id="no-executor-message" class="text-gray-400 text-sm italic">Nenhum executor selecionado.</span>';
-                return;
-            }
-
-            // Se há executores, garante que a mensagem 'nenhum' seja removida/oculta se existir
-            if (noMessage && container.contains(noMessage)) {
-                noMessage.remove(); // Remove o elemento se ele ainda estiver no container
-            }
-
-            selectedExecutors.forEach(id => {
-                const tagHtml = `
-                    <span class="executor-tag" id="executor-tag-${id}">
-                        ${id}
-                        <span class="executor-remove-btn" onclick="window.removeExecutor('${id}')">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                // Se não há executores, renderiza a mensagem padrão
+                contentHTML = '<span id="no-executor-message" class="text-gray-400 text-sm italic">Nenhum executor selecionado.</span>';
+            } else {
+                // Se há executores, renderiza todas as tags
+                selectedExecutors.forEach(id => {
+                    contentHTML += `
+                        <span class="executor-tag" id="executor-tag-${id}">
+                            ${id}
+                            <span class="executor-remove-btn" onclick="window.removeExecutor('${id}')">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                            </span>
                         </span>
-                    </span>
-                `;
-                container.insertAdjacentHTML('beforeend', tagHtml);
-            });
+                    `;
+                });
+            }
+            
+            // Set innerHTML once to fully replace all contents and resolve any lingering visual bugs.
+            container.innerHTML = contentHTML;
         }
         
         window.copyReportId = function() { 
