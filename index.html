@@ -253,7 +253,7 @@
                     // Mission Edit Input
                     inputContainer.classList.remove('hidden');
                     label1.textContent = 'Novo Nome da Missão:';
-                    input1.value = data.name || '';
+                    input1.value = data.name || ''; // Define o nome da missão
                     label2.textContent = 'Novo Rank:';
                     
                     // Populate Rank Select
@@ -261,6 +261,7 @@
                         const option = document.createElement('option');
                         option.value = rank;
                         option.textContent = rank;
+                        // Define o rank atual como selecionado
                         if (rank === data.rank) option.selected = true;
                         selectRank.appendChild(option);
                     });
@@ -875,6 +876,7 @@
                 selectedExecutors.push(ninjaId);
                 select.value = ''; // Reseta o select
                 window.updateExecutorTags();
+                window.updateExecutorSelect(); // CORREÇÃO: Garante que o dropdown de disponíveis seja atualizado
                 window.updateDescriptionPreview(); // CORREÇÃO: Atualiza o preview e status do botão
                 console.log(`Executor adicionado: ${ninjaId}`);
             } else {
@@ -885,6 +887,7 @@
         window.removeExecutor = function(ninjaId) {
             selectedExecutors = selectedExecutors.filter(id => id !== ninjaId);
             window.updateExecutorTags();
+            window.updateExecutorSelect(); // CORREÇÃO: Garante que o dropdown de disponíveis seja atualizado
             window.updateDescriptionPreview(); // CORREÇÃO: Atualiza o preview e status do botão
              console.log(`Executor removido: ${ninjaId}`);
         }
