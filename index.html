@@ -116,7 +116,7 @@
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, doc, setDoc, onSnapshot, collection, writeBatch, 
-            updateDoc, getDoc, deleteDoc, getDocs, setLogLevel // ADICIONADO getDocs
+            updateDoc, getDoc, deleteDoc, getDocs, setLogLevel
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // ====================================================================
@@ -242,6 +242,7 @@
                 
                 // Configuração padrão para botões
                 confirmBtn.classList.remove('bg-red-600', 'hover:bg-red-700');
+                confirmBtn.classList.remove('bg-orange-600', 'hover:bg-orange-700');
                 confirmBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
 
 
@@ -1003,22 +1004,35 @@
                 const statusElement = document.getElementById('status');
                 statusElement.classList.remove('hidden');
                 statusElement.className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
-                statusElement.textContent = `Iniciando exclusão do Log de Auxílio...`;
+                statusElement.textContent = `Iniciando exclusão do Log de Auxílio e resetando pontos...`;
                 
                 try {
-                    const collectionRef = collection(db, COLLECTIONS.AUXILIARY_LOG);
-                    const snapshot = await getDocs(collectionRef); // Usa getDocs
+                    const auxCollectionRef = collection(db, COLLECTIONS.AUXILIARY_LOG);
+                    const ninjaCollectionRef = collection(db, COLLECTIONS.NINJAS);
+
+                    const auxSnapshot = await getDocs(auxCollectionRef); // Usa getDocs
+                    const ninjaSnapshot = await getDocs(ninjaCollectionRef);
                     const batch = writeBatch(db);
                     let count = 0;
 
-                    snapshot.forEach((doc) => {
+                    // 1. Deleta todos os logs de auxílio
+                    auxSnapshot.forEach((doc) => {
                         batch.delete(doc.ref);
                         count++;
+                    });
+                    
+                    // 2. Reseta os pontos dos Guardiões (Apenas missionsCompleted e rankPoints)
+                    ninjaSnapshot.forEach((doc) => {
+                         // Reseta apenas os campos que representam o Rank/Pontuação, mantendo o status isActive
+                        batch.update(doc.ref, { 
+                            rankPoints: 0,
+                            missionsCompleted: 0
+                        });
                     });
 
                     await batch.commit();
 
-                    statusElement.textContent = `✅ Sucesso! ${count} registros de auxílio excluídos.`;
+                    statusElement.textContent = `✅ Sucesso! ${count} registros de auxílio excluídos e Ranks de Guardiões resetados.`;
                     statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
                 } catch (e) {
                     console.error("Erro ao excluir Log de Auxílio:", e);
@@ -1046,22 +1060,42 @@
                 const statusElement = document.getElementById('status');
                 statusElement.classList.remove('hidden');
                 statusElement.className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
-                statusElement.textContent = `Iniciando exclusão do Log de Relatórios...`;
+                statusElement.textContent = `Iniciando exclusão do Log de Relatórios e resetando pontos...`;
                 
                 try {
-                    const collectionRef = collection(db, COLLECTIONS.REPORTS);
-                    const snapshot = await getDocs(collectionRef); // Usa getDocs
+                    const reportsCollectionRef = collection(db, COLLECTIONS.REPORTS);
+                    const ninjaCollectionRef = collection(db, COLLECTIONS.NINJAS);
+                    const auxCollectionRef = collection(db, COLLECTIONS.AUXILIARY_LOG);
+                    
+                    const reportsSnapshot = await getDocs(reportsCollectionRef); // Usa getDocs
+                    const ninjaSnapshot = await getDocs(ninjaCollectionRef);
+                    const auxSnapshot = await getDocs(auxCollectionRef);
                     const batch = writeBatch(db);
-                    let count = 0;
+                    let reportCount = 0;
 
-                    snapshot.forEach((doc) => {
+                    // 1. Deleta todos os relatórios
+                    reportsSnapshot.forEach((doc) => {
                         batch.delete(doc.ref);
-                        count++;
+                        reportCount++;
                     });
                     
+                    // 2. Reseta os pontos dos Guardiões (NINJAS)
+                    ninjaSnapshot.forEach((doc) => {
+                         // Reseta apenas os campos que representam o Rank/Pontuação, mantendo o status isActive
+                        batch.update(doc.ref, { 
+                            rankPoints: 0,
+                            missionsCompleted: 0
+                        });
+                    });
+                    
+                    // 3. Deleta todos os logs de auxílio (já que os relatórios foram excluídos, o auxílio também deve ser zerado)
+                    auxSnapshot.forEach((doc) => {
+                        batch.delete(doc.ref);
+                    });
+
                     await batch.commit();
 
-                    statusElement.textContent = `✅ Sucesso! ${count} relatórios excluídos.`;
+                    statusElement.textContent = `✅ Sucesso! ${reportCount} relatórios excluídos e Ranks de Guardiões/Auxílio resetados.`;
                     statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
                 } catch (e) {
                     console.error("Erro ao excluir Log de Relatórios:", e);
@@ -2039,13 +2073,13 @@
                 <!-- Master Admin Tools (Exclusão de Histórico) -->
                 <div id="admin-tools" class="pt-8 space-y-4 admin-only ${isMasterAdminMode ? '' : 'hidden'}">
                     <h3 class="text-xl font-bold text-red-500 border-b border-red-500/50 pb-2">Ferramentas de Exclusão (Admin Master)</h3>
-                    <p class="text-gray-400">Use com extrema cautela. A exclusão de logs é IRREVERSÍVEL e afeta o Rank.</p>
+                    <p class="text-gray-400">Use com extrema cautela. A exclusão de logs é IRREVERSÍVEL e exige o reset do Rank.</p>
                     <div class="flex flex-col sm:flex-row gap-4">
                         <button onclick="window.clearAuxiliaryLog()" class="w-full py-2 px-4 bg-red-700 hover:bg-red-800 rounded-lg font-bold text-white transition duration-200">
                             🛡️ Excluir Histórico de Auxílio
                         </button>
                         <button onclick="window.clearReportsLog()" class="w-full py-2 px-4 bg-red-700 hover:bg-red-800 rounded-lg font-bold text-white transition duration-200">
-                            ⚔️ Excluir Histórico de Relatórios
+                            ⚔️ Excluir Histórico de Relatórios (Reseta Ranks)
                         </button>
                     </div>
                 </div>
