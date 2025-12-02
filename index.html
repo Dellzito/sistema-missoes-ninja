@@ -1114,6 +1114,1325 @@
             `;
         }
         
+        // NOVO: Renderização do Painel de Ninjas
+        window.renderNinjaPanel = function() {
+            // Combina IDs de Guardiões Ativos/Inativos e IDs de Auxílio em uma única lista
+            const allIdsMap = {};
+            
+            // Adiciona Guardiões (com status de ativo)
+            Object.values(ninjasData).forEach(n => {
+                allIdsMap[n.id] = { id: n.id, type: n.isActive ? 'Guardião Ativo' : 'Guardião Inativo' };
+            });
+
+            // Adiciona Auxiliares que não são Guardiões
+            Object.values(auxiliaryData).forEach(a => {
+                if (!allIdsMap[a.id]) {
+                    allIdsMap[a.id] = { id: a.id, type: 'Auxiliar' };
+                }
+            });
+
+            const allIdsSorted = Object.values(allIdsMap).sort((a, b) => a.id.localeCompare(b.id));
+
+            const ninjaOptions = allIdsSorted.map(n => 
+                `<option value="${n.id}" class="${n.type.includes('Inativo') ? 'text-red-400' : ''}">
+                    ${n.id} (${n.type})
+                </option>`
+            ).join('');
+            
+            // REMOVIDA A OPÇÃO RESET_LS
+            return `
+                <section class="space-y-6 pt-4">
+                    <h2 class="text-3xl font-bold text-purple-400 text-center flex justify-center items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                        Painel de Ninjas - Histórico Completo
+                    </h2>
+                    <p class="text-center text-gray-400">Selecione qualquer ID de Ninja (Guardião ou Auxiliar) para ver seu histórico de relatórios e pontos.</p>
+
+                    <!-- Seletor de Ninja/Auxiliar -->
+                    <div class="max-w-md mx-auto space-y-2">
+                        <label for="ninja-filter-select" class="block text-sm font-medium text-gray-300">Selecionar Ninja</label>
+                        <select id="ninja-filter-select" onchange="window.renderReportsLogFiltered(this.value)" class="w-full p-2.5 rounded-lg bg-gray-700 border border-gray-600 focus:ring-purple-500 focus:border-purple-500 text-white shadow-inner">
+                            <option value="">-- Ver Todos os Relatórios --</option>
+                            ${ninjaOptions}
+                        </select>
+                    </div>
+
+                    <!-- Informações do Ninja Selecionado (Pontos e Missões) -->
+                    <div id="guardian-summary" class="max-w-md mx-auto p-4 bg-gray-700 rounded-lg shadow-inner text-center hidden">
+                        <!-- Summary will be injected here -->
+                    </div>
+
+                    <!-- Tabela de Relatórios Filtrada -->
+                    <div id="filtered-reports-container" class="bg-gray-800 p-4 rounded-xl shadow-xl overflow-x-auto">
+                        <h3 class="text-xl font-medium text-gray-300 mb-4">Relatórios Envolvidos:</h3>
+                        <table class="min-w-full divide-y divide-gray-700">
+                            <thead class="bg-gray-700">
+                                <tr>
+                                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-1/12">ID Relatório</th>
+                                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-2/12">Serviços/Rank</th>
+                                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-2/12">Função</th>
+                                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-2/12">Total Pts</th>
+                                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-4/12">Descrição</th>
+                                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-1/12">Data</th>
+                                </tr>
+                            </thead>
+                            <tbody id="filtered-reports-log" class="bg-gray-800 divide-y divide-gray-700">
+                                <!-- Report data will be inserted here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            `;
+        }
+
+        // ====================================================================
+        // FUNÇÕES DE PERSISTÊNCIA E INICIALIZAÇÃO (FIREBASE)
+        // ====================================================================
+
+        async function initializeFirebase() {
+            try {
+                if (!firebaseConfig || !firebaseConfig.projectId) {
+                    throw new Error("Configuração do Firebase inválida ou faltando.");
+                }
+                
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                // Login Anônimo para acesso BÁSICO (Leitura)
+                const anonUser = await signInAnonymously(auth);
+                userId = anonUser.user.uid;
+                
+                document.getElementById('auth-info').textContent = `Usuário ID (Anon): ${userId} | App ID (DB Contexto): ${appId}`;
+                setupFirestoreListeners(); // Inicia os listeners de dados
+                window.renderPage(currentPage);
+                window.generateReportId(); 
+                
+
+            } catch (error) {
+                console.error("Erro na inicialização do Firebase:", error);
+                const statusElement = document.getElementById('status');
+                statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                statusElement.textContent = `❌ Erro ao conectar: ${error.message}. Verifique sua chave de API e regras de segurança.`;
+            }
+        }
+        
+        function setupFirestoreListeners() {
+            if (!db) return;
+
+            // 0. Chaves de Acesso (Nova Coleção)
+            // Tenta se inscrever, mas lida com o erro de permissão silenciosamente.
+            onSnapshot(collection(db, COLLECTIONS.ACCESS_KEYS), (snapshot) => {
+                accessKeysData = {};
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    accessKeysData[doc.id] = data; 
+                });
+            }, (error) => { 
+                console.warn("@firebase/firestore: Permissão negada para ACCESS_KEYS (normal para usuários anônimos):", error.message);
+            });
+
+            // 1. Missões / Quests
+            onSnapshot(collection(db, COLLECTIONS.MISSIONS), (snapshot) => {
+                missionsData = {};
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    missionsData[data.name] = data; 
+                });
+                if (Object.keys(missionsData).length === 0) {
+                     seedInitialData(db);
+                }
+                if (['report_form', 'admin_panel'].includes(currentPage)) {
+                    window.renderMissionsDatabase && window.renderMissionsDatabase();
+                } else {
+                     window.updateMissionSelects && window.updateMissionSelects(false); 
+                }
+            }, (error) => {
+                console.warn("@firebase/firestore: Permissão negada para MISSIONS (normal para usuários anônimos):", error.message);
+            });
+
+            // 2. Ninjas / Cadastro e Scoreboard
+            onSnapshot(collection(db, COLLECTIONS.NINJAS), (snapshot) => {
+                ninjasData = {};
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    data.id = doc.id; 
+                    ninjasData[data.id] = data;
+                });
+                if (['report_form', 'scoreboard', 'ninja_panel'].includes(currentPage)) {
+                    window.renderPage(currentPage);
+                } else if (currentPage === 'admin_panel') {
+                     window.renderNinjasTable && window.renderNinjasTable();
+                }
+            }, (error) => {
+                console.warn("@firebase/firestore: Permissão negada para NINJAS (normal para usuários anônimos):", error.message);
+            });
+            
+            // 3. Log de Auxílio
+            onSnapshot(collection(db, COLLECTIONS.AUXILIARY_LOG), (snapshot) => {
+                auxiliaryData = {};
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    auxiliaryData[doc.id] = data;
+                });
+                if (['auxiliary_log', 'ninja_panel'].includes(currentPage)) {
+                    window.renderAuxiliaryData && window.renderAuxiliaryData(); 
+                }
+            }, (error) => {
+                console.warn("@firebase/firestore: Permissão negada para AUXILIARY_LOG (normal para usuários anônimos):", error.message);
+            });
+
+            // 4. Relatórios / Logs
+            onSnapshot(collection(db, COLLECTIONS.REPORTS), (snapshot) => {
+                reportsData = [];
+                snapshot.forEach(doc => reportsData.push(doc.data()));
+                if (['reports_log', 'ninja_panel'].includes(currentPage)) window.renderPage(currentPage);
+            }, (error) => {
+                console.warn("@firebase/firestore: Permissão negada para REPORTS (normal para usuários anônimos):", error.message);
+            });
+        }
+        
+        // Simula o seed de dados no Firestore
+        async function seedInitialData(db) {
+            // ... (Lógica de seed mantida)
+            const newMissionsList = [
+                { name: "Village's Most Wanted", rank: "S-Rank" },
+                { name: "Glacier Bear Hunt", rank: "A-Rank" },
+                { name: "Puppet Retirement", rank: "A-Rank" },
+                { name: "Retrieve Compromised Documents", rank: "A-Rank" },
+                { name: "Spy on Hokage/Kazekage/Mizukage Office", rank: "A-Rank" },
+                { name: "Bounty Hunting", rank: "B-Rank" },
+                { name: "Cold-Blooded Killer", rank: "B-Rank" },
+                { name: "Guilty Pleasure", rank: "B-Rank" },
+                { name: "Medical Supplies", rank: "B-Rank" },
+                { name: "Antidotes Creation", rank: "C-Rank" },
+                { name: "Bear Hunt", rank: "C-Rank" },
+                { name: "Messenger Ninja", rank: "C-Rank" },
+                { name: "Shark Attack", rank: "C-Rank" },
+                { name: "Academy Scrolls", rank: "D-Rank" },
+                { name: "Bad Larva", rank: "D-Rank" },
+                { name: "Defeat Spiders", rank: "D-Rank" },
+                { name: "Lost Puppy 'Giba'", rank: "D-Rank" },
+                { name: "Defesa de Vila ou Raid", rank: "Defesa/Raid" },
+                { name: "A Demon??", rank: "NPC Quest" },
+                { name: "Land Of Waves", rank: "Storyline" },
+            ];
+
+            const batch = writeBatch(db);
+            let ninjasAdded = 0;
+
+            for (const mission of newMissionsList) {
+                const docId = mission.name;
+                const missionRef = doc(db, COLLECTIONS.MISSIONS, docId);
+                const cleanRank = cleanRankForLookup(mission.rank);
+                const points = RANK_POINTS[cleanRank] || 0; 
+                batch.set(missionRef, {
+                    name: mission.name,
+                    baseRank: mission.rank,
+                    points: points,
+                    id: mission.name
+                });
+            }
+
+            const exampleNinjas = ['dellzito', 'alnvctr'];
+            for (const id of exampleNinjas) {
+                const normalizedId = normalizeId(id); 
+                const ninjaRef = doc(db, COLLECTIONS.NINJAS, normalizedId);
+                const ninjaSnap = await getDoc(ninjaRef);
+                if (!ninjaSnap.exists()) {
+                    batch.set(ninjaRef, { id: normalizedId, isActive: true, rankPoints: 0, missionsCompleted: 0 });
+                    ninjasAdded++;
+                }
+            }
+            
+            // NOVO: Adiciona uma chave de ADMIN MASTER para o primeiro uso
+            const masterKeyRef = doc(db, COLLECTIONS.ACCESS_KEYS, 'MASTER_ADMIN');
+            batch.set(masterKeyRef, {
+                id: 'MASTER_ADMIN',
+                key: 'MASTER_KEY_001', // Chave única e secreta para você (MUDE ESTE VALOR MANUALMENTE NO FIRESTORE)
+                level: 'master_admin'
+            }, { merge: true });
+
+            // NOVO: Adiciona uma chave de ESCRITOR de exemplo
+            const writerKeyRef = doc(db, COLLECTIONS.ACCESS_KEYS, 'Guardião_Exemplo');
+            batch.set(writerKeyRef, {
+                id: 'GUARDIAN_1',
+                key: 'report_123', // Chave para um Guardião (MUDE ESTE VALOR MANUALMENTE NO FIRESTORE)
+                level: 'report_writer'
+            }, { merge: true });
+
+
+            if (newMissionsList.length > 0 || ninjasAdded > 0) {
+                try {
+                    await batch.commit();
+                } catch (e) {
+                     console.error("Erro ao fazer seed inicial no Firestore:", e);
+                }
+            }
+        }
+        
+        // ====================================================================
+        // FUNÇÕES DE CONTROLE DE ACESSO
+        // ====================================================================
+
+        window.toggleWriterUI = function(isAuthorized) {
+            isWriterMode = isAuthorized;
+            // Libera a aba Criar Relatório e o Gerenciamento de Missões
+            const writerElements = document.querySelectorAll('.writer-only');
+            
+            writerElements.forEach(el => {
+                if (isAuthorized) {
+                    el.classList.remove('hidden');
+                } else {
+                    el.classList.add('hidden');
+                }
+            });
+            // Re-renderiza a página atual para aplicar as permissões
+            window.renderPage(currentPage);
+        }
+
+        window.toggleMasterAdminUI = function(isAuthorized) {
+            isMasterAdminMode = isAuthorized;
+            // Libera todas as funcionalidades de Admin
+            const adminElements = document.querySelectorAll('.admin-only');
+            
+            adminElements.forEach(el => {
+                if (isAuthorized) {
+                    el.classList.remove('hidden');
+                } else {
+                    el.classList.add('hidden');
+                }
+            });
+            // Re-renderiza a página atual para aplicar as permissões
+            window.renderPage(currentPage);
+        }
+        
+        window.checkAccessKey = async function() {
+            const idInput = document.getElementById('access-id-input');
+            const keyInput = document.getElementById('access-key-input');
+            const statusElement = document.getElementById('status');
+            
+            if (!idInput || !keyInput) return;
+
+            const id = idInput.value.trim();
+            const key = keyInput.value.trim();
+            
+            if (!id || !key) {
+                statusElement.textContent = '❌ Preencha o ID e a Senha.';
+                statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                setTimeout(() => statusElement.classList.add('hidden'), 5000);
+                return;
+            }
+            
+            // 1. Procura a chave no cache do Firebase
+            const accessData = accessKeysData[id];
+
+            if (accessData && accessData.key === key) {
+                
+                if (accessData.level === 'master_admin') {
+                    window.toggleMasterAdminUI(true);
+                    window.toggleWriterUI(true);
+                    statusElement.textContent = `✅ Acesso MASTER LIBERADO. ID: ${id}`;
+                } else if (accessData.level === 'report_writer') {
+                    window.toggleWriterUI(true);
+                    window.toggleMasterAdminUI(false);
+                    statusElement.textContent = `✅ Acesso ESCRITOR LIBERADO. ID: ${id}`;
+                } else {
+                    statusElement.textContent = '❌ ID/Senha válidos, mas Nível de Acesso não reconhecido.';
+                    statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                    setTimeout(() => statusElement.classList.add('hidden'), 7000);
+                    return;
+                }
+                
+                keyInput.value = ''; 
+                idInput.value = '';
+                statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
+                setTimeout(() => statusElement.classList.add('hidden'), 5000);
+                
+            } else {
+                window.toggleWriterUI(false);
+                window.toggleMasterAdminUI(false);
+                statusElement.textContent = '❌ Autorização Negada. ID ou Senha Incorreta.';
+                statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                setTimeout(() => statusElement.classList.add('hidden'), 7000);
+            }
+        }
+        
+        // ====================================================================
+        // FUNÇÕES DE ROTEAMENTO E TEMPLATES
+        // ====================================================================
+
+        window.renderPage = function(pageName) {
+            currentPage = pageName;
+            const contentDiv = document.getElementById('content');
+            
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('active');
+            });
+            const activeLink = document.getElementById(`nav-${pageName}`);
+            if (activeLink) activeLink.classList.add('active');
+
+            contentDiv.innerHTML = '';
+
+            switch (pageName) {
+                case 'home':
+                    contentDiv.innerHTML = window.renderHome();
+                    break;
+                case 'report_form':
+                    contentDiv.innerHTML = window.renderCriarRelatorio();
+                    if (!isWriterMode) {
+                        contentDiv.innerHTML += '<p class="text-center text-red-500 pt-8">Você precisa de autorização (Login na aba Autorização) para criar relatórios.</p>';
+                        break;
+                    }
+                    // Funções de inicialização específicas para a página de relatório
+                    window.updateMissionSelects(false); 
+                    window.updateExecutorSelect();
+                    window.updateExecutorTags(false); 
+                    window.generateReportId();
+                    window.addMissionEntry(null, false); 
+                    window.updateDescriptionPreview();
+                    break;
+                case 'scoreboard':
+                    contentDiv.innerHTML = window.renderRank();
+                    window.renderScoreboard();
+                    break;
+                case 'reports_log':
+                    contentDiv.innerHTML = window.renderRelatorios();
+                    window.renderReportsLog();
+                    break;
+                case 'auxiliary_log':
+                    contentDiv.innerHTML = window.renderAuxilio();
+                    window.renderAuxiliaryData(); 
+                    break;
+                case 'admin_panel':
+                    contentDiv.innerHTML = window.renderAutorizacao();
+                    window.renderNinjasTable();
+                    window.renderMissionsDatabase();
+                    break;
+                case 'ninja_panel':
+                    contentDiv.innerHTML = window.renderNinjaPanel(); // Renderiza o template HTML
+                    window.renderReportsLogFiltered(); // Preenche os dados
+                    break;
+                default:
+                    contentDiv.innerHTML = window.renderHome();
+            }
+        }
+
+        // --- TEMPLATES ---
+        window.renderHome = function() { return `
+                <section class="text-center py-20 bg-gray-800 rounded-xl shadow-2xl space-y-8">
+                    <h2 class="text-3xl font-bold text-green-400">Bem-vindo(a) à Folha de Rosto Ninja!</h2>
+                    <p class="text-lg text-gray-300 max-w-2xl mx-auto">
+                        Este é o painel central para o sistema de rastreamento de missões e ranking dos Guardiões. 
+                        Todos os dados são sincronizados em tempo real via Firebase.
+                    </p>
+                    <div class="flex flex-col sm:flex-row justify-center gap-6 pt-4">
+                        <button onclick="window.renderPage('report_form')" class="py-3 px-8 bg-blue-600 hover:bg-blue-700 rounded-lg font-bold text-white text-xl transition duration-200 shadow-lg shadow-blue-500/50">
+                            Criar Novo Relatório
+                        </button>
+                        <button onclick="window.renderPage('scoreboard')" class="py-3 px-8 bg-red-600 hover:bg-red-700 rounded-lg font-bold text-white text-xl transition duration-200 shadow-lg shadow-red-500/50">
+                            Ver Rank
+                        </button>
+                        <button onclick="window.renderPage('admin_panel')" class="py-3 px-8 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-bold text-white text-xl transition duration-200 shadow-lg shadow-yellow-500/50">
+                            Autorização
+                        </button>
+                    </div>
+                </section>
+            `; }
+
+        window.renderCriarRelatorio = function() { return `
+                <section id="report-form-section" class="bg-gray-800 p-6 rounded-xl shadow-2xl space-y-6">
+                    <h2 class="text-3xl font-semibold border-b pb-3 border-gray-700 text-blue-300 text-center">Formulário de Registro de Missão</h2>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        
+                        <!-- ID Ninja (Quem Realizou) - AGORA COM SELECT -->
+                        <div class="space-y-2 lg:col-span-3">
+                            <label class="block text-sm font-medium text-gray-300">IDs Ninja (Quem Realizou - Membros Cadastrados)</label>
+                            
+                            <!-- Select e botão para adicionar -->
+                            <div class="flex gap-2">
+                                <select id="new-executor-id-select" class="flex-grow p-2.5 rounded-lg bg-gray-700 border border-gray-600 focus:ring-blue-500 focus:border-blue-500 text-white shadow-inner">
+                                    <option value="" disabled selected>Selecione um Guardião Ativo</option>
+                                    <!-- Options preenchidas dinamicamente por updateExecutorSelect -->
+                                </select>
+                                <button type="button" id="add-executor-btn" class="py-2.5 px-4 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition duration-200 font-semibold">
+                                    Adicionar Executor
+                                </button>
+                            </div>
+
+                            <!-- Tags de Executores Selecionados -->
+                            <div id="executors-tag-container" class="executor-list-container">
+                                <!-- Tags serão injetadas aqui -->
+                                <span id="no-executor-message" class="text-gray-400 text-sm italic">Nenhum executor selecionado.</span>
+                            </div>
+                        </div>
+                        
+                        <!-- ID Cliente (Requisitantes) -->
+                        <div class="space-y-2">
+                            <label for="clients" class="block text-sm font-medium text-gray-300">Clientes (Requisitantes, separados por vírgula)</label>
+                            <input id="clients" type="text" placeholder="lukfault, logagault" class="w-full p-2.5 rounded-lg bg-gray-700 border border-gray-600 focus:ring-blue-500 focus:border-blue-500 text-white shadow-inner" oninput="window.updateDescriptionPreview()">
+                        </div>
+
+                        <!-- Auxílio (Quem Ajudou - Rastreamento Separado) -->
+                        <div class="space-y-2">
+                            <label for="support-ids" class="block text-sm font-medium text-gray-300">Auxílio (IDs, separados por vírgula, Opcional)</label>
+                            <input id="support-ids" type="text" placeholder="AlnVctr, Yakuza" class="w-full p-2.5 rounded-lg bg-gray-700 border border-gray-600 focus:ring-blue-500 focus:border-blue-500 text-white shadow-inner" oninput="window.updateDescriptionPreview()">
+                        </div>
+                        
+                        <!-- Detalhes da Missão (Para a Descrição) -->
+                        <div class="space-y-2 lg:col-span-3">
+                            <label for="mission-details" class="block text-sm font-medium text-gray-300">Detalhes para a Descrição (Ex: "60 DNAs para o Arco do 30")</label>
+                            <input id="mission-details" type="text" placeholder="Descrição curta do objetivo da missão" class="w-full p-2.5 rounded-lg bg-gray-700 border border-gray-600 focus:ring-blue-500 focus:border-blue-500 text-white shadow-inner" oninput="window.updateDescriptionPreview()">
+                        </div>
+
+                        <!-- ID Relatório (Código de Registro) -->
+                        <div class="space-y-2 lg:col-span-3">
+                            <label for="report-id-display" class="block text-sm font-medium text-gray-300">ID Único do Relatório (Código de Registro)</label>
+                            <div class="flex gap-2">
+                                <input id="report-id-display" type="text" readonly class="w-full p-2.5 rounded-lg bg-gray-600/50 border border-gray-600 text-purple-300 font-mono shadow-inner cursor-not-allowed" value="Gerado Automaticamente">
+                                <button type="button" onclick="window.copyReportId()" class="p-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition duration-200" title="Copiar ID para o Discord">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M7 9a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1zm0 4a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1z" /><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a1 1 0 00-1 1v2a1 1 0 102 0V6a1 1 0 00-1-1zm2 13a1 1 0 001-1v-2a1 1 0 10-2 0v2a1 1 0 001 1z" clip-rule="evenodd" /></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pt-4 space-y-4 border-t border-gray-700/50">
+                        <h3 class="text-xl font-medium text-gray-300 flex justify-between items-center">
+                            Missões Concluídas Neste Relatório
+                            <button id="add-mission-btn" class="py-1 px-3 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition duration-200 shadow-md flex items-center gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" /></svg>
+                                Adicionar Missão
+                            </button>
+                        </h3>
+
+                        <!-- Contêiner de Entrada de Missões -->
+                        <div id="missions-entry-container" class="space-y-3">
+                            <!-- Mission entries will be added here -->
+                        </div>
+
+                        <!-- Resumo de Pontos e Rank -->
+                        <div class="grid grid-cols-2 gap-4 pt-4">
+                            <div class="space-y-2 lg:col-span-2">
+                                <label class="block text-sm font-medium text-gray-300">Total de Pontos (Pontos Brutos da Missão)</label>
+                                <input id="total-points" type="text" readonly class="w-full p-2.5 rounded-lg bg-gray-600/50 border border-gray-600 text-green-400 font-bold shadow-inner cursor-not-allowed" value="0">
+                            </div>
+                            <!-- REMOVIDO: Pontos p/ Pessoa (Estimado) -->
+                        </div>
+                    </div>
+
+                    <!-- Preview da Descrição -->
+                    <div class="pt-4 space-y-2 border-t border-gray-700/50">
+                        <h3 class="text-xl font-medium text-gray-300">Preview da Descrição do Relatório:</h3>
+                        <div id="description-preview" class="p-4 bg-gray-700 rounded-lg text-gray-300 italic min-h-[50px]">
+                            A descrição do relatório aparecerá aqui ao preencher o formulário.
+                        </div>
+                    </div>
+
+                    <button id="submit-report" class="w-full py-3 mt-4 bg-blue-600 hover:bg-blue-700 rounded-lg font-bold text-white text-lg transition duration-200 shadow-lg shadow-blue-500/50" disabled onclick="window.submitReport()">
+                        Registrar Missão(ões) e Atualizar Ranking
+                    </button>
+                </section>
+            `;
+        }
+        
+        window.renderRank = function() {
+            return `
+                <section class="space-y-4 pt-8">
+                    <h2 class="text-3xl font-bold text-red-400 text-center flex justify-center items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 8a1 1 0 000 2h6a1 1 0 100-2H7z" clip-rule="evenodd" /><path fill-rule="evenodd" d="M10 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zM5 10a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z" clip-rule="evenodd" /></svg>
+                        Rank dos Guardiões (Membros Cadastrados)
+                    </h2>
+                    <div class="bg-gray-800 p-4 rounded-xl shadow-xl overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-700">
+                            <thead class="bg-gray-700">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Rank</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">ID Guardião</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Total de Pontos</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Missões Concluídas</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ninjas-scoreboard" class="bg-gray-800 divide-y divide-gray-700">
+                                <!-- Scoreboard data will be inserted here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            `;
+        }
+
+        window.renderRelatorios = function() {
+            return `
+                <section class="space-y-4 pt-8">
+                    <h2 class="text-3xl font-bold text-blue-400 text-center">Registro Completo de Relatórios</h2>
+                    <div class="bg-gray-800 p-4 rounded-xl shadow-xl overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-700">
+                            <thead class="bg-gray-700">
+                                <tr>
+                                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-1/12">ID Relatório</th>
+                                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-2/12">Serviços/Rank</th>
+                                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-2/12">Executor/Auxílio</th>
+                                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-2/12">Clientes</th>
+                                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-3/12">Descrição</th>
+                                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-1/12">Data</th>
+                                </tr>
+                            </thead>
+                            <tbody id="reports-log" class="bg-gray-800 divide-y divide-gray-700">
+                                <!-- Report data will be inserted here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            `;
+        }
+
+        // Template HTML para a página de auxílio
+        window.renderAuxilio = function() {
+            return `
+                <section class="space-y-4 pt-8">
+                    <h2 class="text-3xl font-bold text-orange-400 text-center flex justify-center items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm4.5-9.5c0 .83-.67 1.5-1.5 1.5s-1.5-.67-1.5-1.5.67-1.5 1.5-1.5 1.5.67 1.5 1.5zM9 9c0-.83-.67-1.5-1.5-1.5S6 8.17 6 9s.67 1.5 1.5 1.5S9 9.83 9 9zm3 2.5c-2.33 0-4.38 1.15-5.69 2.84.03-.02.06-.04.09-.07C6.67 13.92 9.07 15 12 15s5.33-1.08 7.6-2.73c.03.03.06.05.09.07-1.31-1.69-3.36-2.84-5.69-2.84z"/></svg>
+                        Log de Auxílio (Potenciais Membros)
+                    </h2>
+                    <p class="text-center text-gray-400">Pessoas que participaram como auxílio e acumulam pontos separadamente.</p>
+                    <div class="bg-gray-800 p-4 rounded-xl shadow-xl overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-700">
+                            <thead class="bg-gray-700">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">ID Auxiliar</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Última Participação</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Pontos Acumulados</th>
+                                </tr>
+                            </thead>
+                            <tbody id="auxiliary-log" class="bg-gray-800 divide-y divide-gray-700">
+                                <!-- Auxiliary data will be inserted here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            `;
+        }
+
+        window.renderAutorizacao = function() {
+             const accessStatus = isMasterAdminMode ? 
+                `<div class="text-center text-green-400 font-bold text-lg p-2">✅ MASTER ADMIN ATIVO</div>` : 
+                (isWriterMode ? `<div class="text-yellow-400 font-bold text-lg p-2">✅ ESCRITOR DE RELATÓRIO ATIVO</div>` :
+                `<div class="text-center text-red-400 font-bold text-lg p-2">❌ ACESSO INATIVO</div>`);
+
+            return `
+                <!-- PAINEL DE AUTORIZAÇÃO (Login Customizado) -->
+                <section class="space-y-4 pt-4 pb-4 bg-gray-900 p-6 rounded-xl shadow-inner border border-blue-500/50">
+                     <h2 class="text-2xl font-bold text-blue-400 text-center flex justify-center items-center gap-2">
+                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2V7a5 5 0 00-5-5zm2 5v2h-4V7a3 3 0 016 0z"/></svg>
+                         Autorização de Escrita (ID & Senha Única)
+                     </h2>
+                     <p class="text-center text-gray-400">Insira seu ID e Senha fornecidos para liberar as funções de escrita e edição.</p>
+                     
+                     <div id="admin-status-display">${accessStatus}</div>
+
+                     <div class="flex flex-col md:flex-row gap-4 max-w-lg mx-auto">
+                         <input id="access-id-input" type="text" placeholder="Seu ID de Guardião/Admin" class="flex-grow p-2 rounded-lg bg-gray-700 border border-gray-600 text-white shadow-inner">
+                         <input id="access-key-input" type="password" placeholder="Sua Senha Única" class="flex-grow p-2 rounded-lg bg-gray-700 border border-gray-600 text-white shadow-inner">
+                         <!-- CORREÇÃO: Adicionado onclick para a função de verificação de acesso -->
+                         <button id="set-access-key-btn" class="w-full md:w-auto py-2 px-4 bg-blue-600 hover:bg-blue-700 rounded-lg font-bold text-white transition duration-200" onclick="window.checkAccessKey()">
+                             Verificar Acesso
+                         </button>
+                     </div>
+                </section>
+                
+                <!-- 5. CADASTRO: GUARDIÕES (MASTER ADMIN ONLY) -->
+                <section class="space-y-4 pt-8 pb-16">
+                    <h2 class="text-3xl font-bold text-yellow-400 text-center">Cadastro: Guardiões (Membros da Organização)</h2>
+                    <p class="text-center text-gray-400">Pessoas que pontuam no Rank dos Guardiões. <span class="text-red-400">Master Admin Apenas.</span></p>
+
+                    <!-- Add New Ninja Form (ADMIN ONLY) -->
+                    <div id="add-ninja-form" class="bg-gray-700 p-4 rounded-lg shadow-inner flex flex-col sm:flex-row gap-4 admin-only ${isMasterAdminMode ? '' : 'hidden'}">
+                        <input id="new-ninja-id" type="text" placeholder="ID do Novo Guardião (Ex: Dellzito)" class="flex-grow p-2 rounded-lg bg-gray-800 border border-gray-600 text-white">
+                        <button id="add-ninja" class="w-full sm:w-auto py-2 px-4 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-bold text-white transition duration-200" onclick="window.addNinja()">Adicionar Guardião</button>
+                    </div>
+
+                    <div class="bg-gray-800 p-4 rounded-xl shadow-xl overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-700">
+                            <thead class="bg-gray-700">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">ID Guardião</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider admin-only ${isMasterAdminMode ? '' : 'hidden'}">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ninjas-cadastro" class="bg-gray-800 divide-y divide-gray-700">
+                                <!-- Ninja data will be inserted here by renderNinjasTable() -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- 6. BANCO DE DADOS: MISSÕES E RANKS (MASTER ADMIN / WRITER MODE) -->
+                <section class="space-y-4 pt-8">
+                    <h2 class="text-3xl font-bold text-green-400 text-center">Gerenciamento de Missões (Quests)</h2>
+                    <p class="text-center text-gray-400">Adicione, edite ou exclua as quests disponíveis. <span class="${isWriterMode ? 'text-green-400' : 'text-red-400'}">Requer Autorização de Escrita.</span></p>
+                    
+                    <!-- Add New Mission Form (WRITER ONLY) -->
+                    <div id="add-mission-form" class="bg-gray-700 p-4 rounded-lg shadow-inner flex flex-col sm:flex-row gap-4 writer-only ${isWriterMode ? '' : 'hidden'}">
+                        <input id="new-mission-name" type="text" placeholder="Novo Nome da Missão" class="flex-grow p-2 rounded-lg bg-gray-800 border border-gray-600 text-white">
+                        <select id="new-mission-rank-select" class="w-full sm:w-32 p-2 rounded-lg bg-gray-800 border border-gray-600 text-white">
+                             <option value="S-Rank">S-Rank (5 Pts)</option>
+                             <option value="A-Rank">A-Rank (4 Pts)</option>
+                             <option value="B-Rank" selected>B-Rank (3 Pts)</option>
+                             <option value="C-Rank">C-Rank (2 Pts)</option>
+                             <option value="D-Rank">D-Rank (1 Pt)</option>
+                             <option value="Defesa/Raid">Defesa/Raid (10 Pts)</option>
+                             <option value="NPC Quest">NPC Quest (0 Pts)</option>
+                             <option value="Storyline">Storyline (0 Pts)</option>
+                        </select>
+                        <button id="add-mission" class="w-full sm:w-auto py-2 px-4 bg-green-600 hover:bg-green-700 rounded-lg font-bold text-white transition duration-200" onclick="window.addMission()">Adicionar Missão</button>
+                    </div>
+                    
+                    <div class="bg-gray-800 p-4 rounded-xl shadow-xl overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-700">
+                            <thead class="bg-gray-700">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Nome da Missão</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Rank Base</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Pontos</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider writer-only ${isWriterMode ? '' : 'hidden'}">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody id="missions-database" class="bg-gray-800 divide-y divide-gray-700">
+                                <!-- Mission data will be inserted here by renderMissionsDatabase() -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            `;
+        }
+
+        // ====================================================================
+        // FUNÇÕES DE PERSISTÊNCIA E INICIALIZAÇÃO (FIREBASE)
+        // ====================================================================
+
+        async function initializeFirebase() {
+            try {
+                if (!firebaseConfig || !firebaseConfig.projectId) {
+                    throw new Error("Configuração do Firebase inválida ou faltando.");
+                }
+                
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                // Login Anônimo para acesso BÁSICO (Leitura)
+                const anonUser = await signInAnonymously(auth);
+                userId = anonUser.user.uid;
+                
+                document.getElementById('auth-info').textContent = `Usuário ID (Anon): ${userId} | App ID (DB Contexto): ${appId}`;
+                setupFirestoreListeners(); // Inicia os listeners de dados
+                window.renderPage(currentPage);
+                window.generateReportId(); 
+                
+
+            } catch (error) {
+                console.error("Erro na inicialização do Firebase:", error);
+                const statusElement = document.getElementById('status');
+                statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                statusElement.textContent = `❌ Erro ao conectar: ${error.message}. Verifique sua chave de API e regras de segurança.`;
+            }
+        }
+        
+        function setupFirestoreListeners() {
+            if (!db) return;
+
+            // 0. Chaves de Acesso (Nova Coleção)
+            // Tenta se inscrever, mas lida com o erro de permissão silenciosamente.
+            onSnapshot(collection(db, COLLECTIONS.ACCESS_KEYS), (snapshot) => {
+                accessKeysData = {};
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    accessKeysData[doc.id] = data; 
+                });
+            }, (error) => { 
+                console.warn("@firebase/firestore: Permissão negada para ACCESS_KEYS (normal para usuários anônimos):", error.message);
+            });
+
+            // 1. Missões / Quests
+            onSnapshot(collection(db, COLLECTIONS.MISSIONS), (snapshot) => {
+                missionsData = {};
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    missionsData[data.name] = data; 
+                });
+                if (Object.keys(missionsData).length === 0) {
+                     seedInitialData(db);
+                }
+                if (['report_form', 'admin_panel'].includes(currentPage)) {
+                    window.renderMissionsDatabase && window.renderMissionsDatabase();
+                } else {
+                     window.updateMissionSelects && window.updateMissionSelects(false); 
+                }
+            }, (error) => {
+                console.warn("@firebase/firestore: Permissão negada para MISSIONS (normal para usuários anônimos):", error.message);
+            });
+
+            // 2. Ninjas / Cadastro e Scoreboard
+            onSnapshot(collection(db, COLLECTIONS.NINJAS), (snapshot) => {
+                ninjasData = {};
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    data.id = doc.id; 
+                    ninjasData[data.id] = data;
+                });
+                if (['report_form', 'scoreboard', 'ninja_panel'].includes(currentPage)) {
+                    window.renderPage(currentPage);
+                } else if (currentPage === 'admin_panel') {
+                     window.renderNinjasTable && window.renderNinjasTable();
+                }
+            }, (error) => {
+                console.warn("@firebase/firestore: Permissão negada para NINJAS (normal para usuários anônimos):", error.message);
+            });
+            
+            // 3. Log de Auxílio
+            onSnapshot(collection(db, COLLECTIONS.AUXILIARY_LOG), (snapshot) => {
+                auxiliaryData = {};
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    auxiliaryData[doc.id] = data;
+                });
+                if (['auxiliary_log', 'ninja_panel'].includes(currentPage)) {
+                    window.renderAuxiliaryData && window.renderAuxiliaryData(); 
+                }
+            }, (error) => {
+                console.warn("@firebase/firestore: Permissão negada para AUXILIARY_LOG (normal para usuários anônimos):", error.message);
+            });
+
+            // 4. Relatórios / Logs
+            onSnapshot(collection(db, COLLECTIONS.REPORTS), (snapshot) => {
+                reportsData = [];
+                snapshot.forEach(doc => reportsData.push(doc.data()));
+                if (['reports_log', 'ninja_panel'].includes(currentPage)) window.renderPage(currentPage);
+            }, (error) => {
+                console.warn("@firebase/firestore: Permissão negada para REPORTS (normal para usuários anônimos):", error.message);
+            });
+        }
+        
+        // Simula o seed de dados no Firestore
+        async function seedInitialData(db) {
+            // ... (Lógica de seed mantida)
+            const newMissionsList = [
+                { name: "Village's Most Wanted", rank: "S-Rank" },
+                { name: "Glacier Bear Hunt", rank: "A-Rank" },
+                { name: "Puppet Retirement", rank: "A-Rank" },
+                { name: "Retrieve Compromised Documents", rank: "A-Rank" },
+                { name: "Spy on Hokage/Kazekage/Mizukage Office", rank: "A-Rank" },
+                { name: "Bounty Hunting", rank: "B-Rank" },
+                { name: "Cold-Blooded Killer", rank: "B-Rank" },
+                { name: "Guilty Pleasure", rank: "B-Rank" },
+                { name: "Medical Supplies", rank: "B-Rank" },
+                { name: "Antidotes Creation", rank: "C-Rank" },
+                { name: "Bear Hunt", rank: "C-Rank" },
+                { name: "Messenger Ninja", rank: "C-Rank" },
+                { name: "Shark Attack", rank: "C-Rank" },
+                { name: "Academy Scrolls", rank: "D-Rank" },
+                { name: "Bad Larva", rank: "D-Rank" },
+                { name: "Defeat Spiders", rank: "D-Rank" },
+                { name: "Lost Puppy 'Giba'", rank: "D-Rank" },
+                { name: "Defesa de Vila ou Raid", rank: "Defesa/Raid" },
+                { name: "A Demon??", rank: "NPC Quest" },
+                { name: "Land Of Waves", rank: "Storyline" },
+            ];
+
+            const batch = writeBatch(db);
+            let ninjasAdded = 0;
+
+            for (const mission of newMissionsList) {
+                const docId = mission.name;
+                const missionRef = doc(db, COLLECTIONS.MISSIONS, docId);
+                const cleanRank = cleanRankForLookup(mission.rank);
+                const points = RANK_POINTS[cleanRank] || 0; 
+                batch.set(missionRef, {
+                    name: mission.name,
+                    baseRank: mission.rank,
+                    points: points,
+                    id: mission.name
+                });
+            }
+
+            const exampleNinjas = ['dellzito', 'alnvctr'];
+            for (const id of exampleNinjas) {
+                const normalizedId = normalizeId(id); 
+                const ninjaRef = doc(db, COLLECTIONS.NINJAS, normalizedId);
+                const ninjaSnap = await getDoc(ninjaRef);
+                if (!ninjaSnap.exists()) {
+                    batch.set(ninjaRef, { id: normalizedId, isActive: true, rankPoints: 0, missionsCompleted: 0 });
+                    ninjasAdded++;
+                }
+            }
+            
+            // NOVO: Adiciona uma chave de ADMIN MASTER para o primeiro uso
+            const masterKeyRef = doc(db, COLLECTIONS.ACCESS_KEYS, 'MASTER_ADMIN');
+            batch.set(masterKeyRef, {
+                id: 'MASTER_ADMIN',
+                key: 'MASTER_KEY_001', // Chave única e secreta para você (MUDE ESTE VALOR MANUALMENTE NO FIRESTORE)
+                level: 'master_admin'
+            }, { merge: true });
+
+            // NOVO: Adiciona uma chave de ESCRITOR de exemplo
+            const writerKeyRef = doc(db, COLLECTIONS.ACCESS_KEYS, 'Guardião_Exemplo');
+            batch.set(writerKeyRef, {
+                id: 'GUARDIAN_1',
+                key: 'report_123', // Chave para um Guardião (MUDE ESTE VALOR MANUALMENTE NO FIRESTORE)
+                level: 'report_writer'
+            }, { merge: true });
+
+
+            if (newMissionsList.length > 0 || ninjasAdded > 0) {
+                try {
+                    await batch.commit();
+                } catch (e) {
+                     console.error("Erro ao fazer seed inicial no Firestore:", e);
+                }
+            }
+        }
+        
+        // ====================================================================
+        // FUNÇÕES DE CONTROLE DE ACESSO
+        // ====================================================================
+
+        window.toggleWriterUI = function(isAuthorized) {
+            isWriterMode = isAuthorized;
+            // Libera a aba Criar Relatório e o Gerenciamento de Missões
+            const writerElements = document.querySelectorAll('.writer-only');
+            
+            writerElements.forEach(el => {
+                if (isAuthorized) {
+                    el.classList.remove('hidden');
+                } else {
+                    el.classList.add('hidden');
+                }
+            });
+            // Re-renderiza a página atual para aplicar as permissões
+            window.renderPage(currentPage);
+        }
+
+        window.toggleMasterAdminUI = function(isAuthorized) {
+            isMasterAdminMode = isAuthorized;
+            // Libera todas as funcionalidades de Admin
+            const adminElements = document.querySelectorAll('.admin-only');
+            
+            adminElements.forEach(el => {
+                if (isAuthorized) {
+                    el.classList.remove('hidden');
+                } else {
+                    el.classList.add('hidden');
+                }
+            });
+            // Re-renderiza a página atual para aplicar as permissões
+            window.renderPage(currentPage);
+        }
+        
+        window.checkAccessKey = async function() {
+            const idInput = document.getElementById('access-id-input');
+            const keyInput = document.getElementById('access-key-input');
+            const statusElement = document.getElementById('status');
+            
+            if (!idInput || !keyInput) return;
+
+            const id = idInput.value.trim();
+            const key = keyInput.value.trim();
+            
+            if (!id || !key) {
+                statusElement.textContent = '❌ Preencha o ID e a Senha.';
+                statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                setTimeout(() => statusElement.classList.add('hidden'), 5000);
+                return;
+            }
+            
+            // 1. Procura a chave no cache do Firebase
+            const accessData = accessKeysData[id];
+
+            if (accessData && accessData.key === key) {
+                
+                if (accessData.level === 'master_admin') {
+                    window.toggleMasterAdminUI(true);
+                    window.toggleWriterUI(true);
+                    statusElement.textContent = `✅ Acesso MASTER LIBERADO. ID: ${id}`;
+                } else if (accessData.level === 'report_writer') {
+                    window.toggleWriterUI(true);
+                    window.toggleMasterAdminUI(false);
+                    statusElement.textContent = `✅ Acesso ESCRITOR LIBERADO. ID: ${id}`;
+                } else {
+                    statusElement.textContent = '❌ ID/Senha válidos, mas Nível de Acesso não reconhecido.';
+                    statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                    setTimeout(() => statusElement.classList.add('hidden'), 7000);
+                    return;
+                }
+                
+                keyInput.value = ''; 
+                idInput.value = '';
+                statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
+                setTimeout(() => statusElement.classList.add('hidden'), 5000);
+                
+            } else {
+                window.toggleWriterUI(false);
+                window.toggleMasterAdminUI(false);
+                statusElement.textContent = '❌ Autorização Negada. ID ou Senha Incorreta.';
+                statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                setTimeout(() => statusElement.classList.add('hidden'), 7000);
+            }
+        }
+        
+        // ====================================================================
+        // FUNÇÕES DE ROTEAMENTO E TEMPLATES
+        // ====================================================================
+
+        window.renderPage = function(pageName) {
+            currentPage = pageName;
+            const contentDiv = document.getElementById('content');
+            
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('active');
+            });
+            const activeLink = document.getElementById(`nav-${pageName}`);
+            if (activeLink) activeLink.classList.add('active');
+
+            contentDiv.innerHTML = '';
+
+            switch (pageName) {
+                case 'home':
+                    contentDiv.innerHTML = window.renderHome();
+                    break;
+                case 'report_form':
+                    contentDiv.innerHTML = window.renderCriarRelatorio();
+                    if (!isWriterMode) {
+                        contentDiv.innerHTML += '<p class="text-center text-red-500 pt-8">Você precisa de autorização (Login na aba Autorização) para criar relatórios.</p>';
+                        break;
+                    }
+                    // Funções de inicialização específicas para a página de relatório
+                    window.updateMissionSelects(false); 
+                    window.updateExecutorSelect();
+                    window.updateExecutorTags(false); 
+                    window.generateReportId();
+                    window.addMissionEntry(null, false); 
+                    window.updateDescriptionPreview();
+                    break;
+                case 'scoreboard':
+                    contentDiv.innerHTML = window.renderRank();
+                    window.renderScoreboard();
+                    break;
+                case 'reports_log':
+                    contentDiv.innerHTML = window.renderRelatorios();
+                    window.renderReportsLog();
+                    break;
+                case 'auxiliary_log':
+                    contentDiv.innerHTML = window.renderAuxilio();
+                    window.renderAuxiliaryData(); 
+                    break;
+                case 'admin_panel':
+                    contentDiv.innerHTML = window.renderAutorizacao();
+                    window.renderNinjasTable();
+                    window.renderMissionsDatabase();
+                    break;
+                case 'ninja_panel':
+                    contentDiv.innerHTML = window.renderNinjaPanel();
+                    window.renderReportsLogFiltered();
+                    break;
+                default:
+                    contentDiv.innerHTML = window.renderHome();
+            }
+        }
+
+        // --- TEMPLATES ---
+        window.renderHome = function() { return `
+                <section class="text-center py-20 bg-gray-800 rounded-xl shadow-2xl space-y-8">
+                    <h2 class="text-3xl font-bold text-green-400">Bem-vindo(a) à Folha de Rosto Ninja!</h2>
+                    <p class="text-lg text-gray-300 max-w-2xl mx-auto">
+                        Este é o painel central para o sistema de rastreamento de missões e ranking dos Guardiões. 
+                        Todos os dados são sincronizados em tempo real via Firebase.
+                    </p>
+                    <div class="flex flex-col sm:flex-row justify-center gap-6 pt-4">
+                        <button onclick="window.renderPage('report_form')" class="py-3 px-8 bg-blue-600 hover:bg-blue-700 rounded-lg font-bold text-white text-xl transition duration-200 shadow-lg shadow-blue-500/50">
+                            Criar Novo Relatório
+                        </button>
+                        <button onclick="window.renderPage('scoreboard')" class="py-3 px-8 bg-red-600 hover:bg-red-700 rounded-lg font-bold text-white text-xl transition duration-200 shadow-lg shadow-red-500/50">
+                            Ver Rank
+                        </button>
+                        <button onclick="window.renderPage('admin_panel')" class="py-3 px-8 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-bold text-white text-xl transition duration-200 shadow-lg shadow-yellow-500/50">
+                            Autorização
+                        </button>
+                    </div>
+                </section>
+            `; }
+
+        window.renderCriarRelatorio = function() { return `
+                <section id="report-form-section" class="bg-gray-800 p-6 rounded-xl shadow-2xl space-y-6">
+                    <h2 class="text-3xl font-semibold border-b pb-3 border-gray-700 text-blue-300 text-center">Formulário de Registro de Missão</h2>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        
+                        <!-- ID Ninja (Quem Realizou) - AGORA COM SELECT -->
+                        <div class="space-y-2 lg:col-span-3">
+                            <label class="block text-sm font-medium text-gray-300">IDs Ninja (Quem Realizou - Membros Cadastrados)</label>
+                            
+                            <!-- Select e botão para adicionar -->
+                            <div class="flex gap-2">
+                                <select id="new-executor-id-select" class="flex-grow p-2.5 rounded-lg bg-gray-700 border border-gray-600 focus:ring-blue-500 focus:border-blue-500 text-white shadow-inner">
+                                    <option value="" disabled selected>Selecione um Guardião Ativo</option>
+                                    <!-- Options preenchidas dinamicamente por updateExecutorSelect -->
+                                </select>
+                                <button type="button" id="add-executor-btn" class="py-2.5 px-4 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition duration-200 font-semibold">
+                                    Adicionar Executor
+                                </button>
+                            </div>
+
+                            <!-- Tags de Executores Selecionados -->
+                            <div id="executors-tag-container" class="executor-list-container">
+                                <!-- Tags serão injetadas aqui -->
+                                <span id="no-executor-message" class="text-gray-400 text-sm italic">Nenhum executor selecionado.</span>
+                            </div>
+                        </div>
+                        
+                        <!-- ID Cliente (Requisitantes) -->
+                        <div class="space-y-2">
+                            <label for="clients" class="block text-sm font-medium text-gray-300">Clientes (Requisitantes, separados por vírgula)</label>
+                            <input id="clients" type="text" placeholder="lukfault, logagault" class="w-full p-2.5 rounded-lg bg-gray-700 border border-gray-600 focus:ring-blue-500 focus:border-blue-500 text-white shadow-inner" oninput="window.updateDescriptionPreview()">
+                        </div>
+
+                        <!-- Auxílio (Quem Ajudou - Rastreamento Separado) -->
+                        <div class="space-y-2">
+                            <label for="support-ids" class="block text-sm font-medium text-gray-300">Auxílio (IDs, separados por vírgula, Opcional)</label>
+                            <input id="support-ids" type="text" placeholder="AlnVctr, Yakuza" class="w-full p-2.5 rounded-lg bg-gray-700 border border-gray-600 focus:ring-blue-500 focus:border-blue-500 text-white shadow-inner" oninput="window.updateDescriptionPreview()">
+                        </div>
+                        
+                        <!-- Detalhes da Missão (Para a Descrição) -->
+                        <div class="space-y-2 lg:col-span-3">
+                            <label for="mission-details" class="block text-sm font-medium text-gray-300">Detalhes para a Descrição (Ex: "60 DNAs para o Arco do 30")</label>
+                            <input id="mission-details" type="text" placeholder="Descrição curta do objetivo da missão" class="w-full p-2.5 rounded-lg bg-gray-700 border border-gray-600 focus:ring-blue-500 focus:border-blue-500 text-white shadow-inner" oninput="window.updateDescriptionPreview()">
+                        </div>
+
+                        <!-- ID Relatório (Código de Registro) -->
+                        <div class="space-y-2 lg:col-span-3">
+                            <label for="report-id-display" class="block text-sm font-medium text-gray-300">ID Único do Relatório (Código de Registro)</label>
+                            <div class="flex gap-2">
+                                <input id="report-id-display" type="text" readonly class="w-full p-2.5 rounded-lg bg-gray-600/50 border border-gray-600 text-purple-300 font-mono shadow-inner cursor-not-allowed" value="Gerado Automaticamente">
+                                <button type="button" onclick="window.copyReportId()" class="p-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition duration-200" title="Copiar ID para o Discord">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M7 9a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1zm0 4a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1z" /><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a1 1 0 00-1 1v2a1 1 0 102 0V6a1 1 0 00-1-1zm2 13a1 1 0 001-1v-2a1 1 0 10-2 0v2a1 1 0 001 1z" clip-rule="evenodd" /></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pt-4 space-y-4 border-t border-gray-700/50">
+                        <h3 class="text-xl font-medium text-gray-300 flex justify-between items-center">
+                            Missões Concluídas Neste Relatório
+                            <button id="add-mission-btn" class="py-1 px-3 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition duration-200 shadow-md flex items-center gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" /></svg>
+                                Adicionar Missão
+                            </button>
+                        </h3>
+
+                        <!-- Contêiner de Entrada de Missões -->
+                        <div id="missions-entry-container" class="space-y-3">
+                            <!-- Mission entries will be added here -->
+                        </div>
+
+                        <!-- Resumo de Pontos e Rank -->
+                        <div class="grid grid-cols-2 gap-4 pt-4">
+                            <div class="space-y-2 lg:col-span-2">
+                                <label class="block text-sm font-medium text-gray-300">Total de Pontos (Pontos Brutos da Missão)</label>
+                                <input id="total-points" type="text" readonly class="w-full p-2.5 rounded-lg bg-gray-600/50 border border-gray-600 text-green-400 font-bold shadow-inner cursor-not-allowed" value="0">
+                            </div>
+                            <!-- REMOVIDO: Pontos p/ Pessoa (Estimado) -->
+                        </div>
+                    </div>
+
+                    <!-- Preview da Descrição -->
+                    <div class="pt-4 space-y-2 border-t border-gray-700/50">
+                        <h3 class="text-xl font-medium text-gray-300">Preview da Descrição do Relatório:</h3>
+                        <div id="description-preview" class="p-4 bg-gray-700 rounded-lg text-gray-300 italic min-h-[50px]">
+                            A descrição do relatório aparecerá aqui ao preencher o formulário.
+                        </div>
+                    </div>
+
+                    <button id="submit-report" class="w-full py-3 mt-4 bg-blue-600 hover:bg-blue-700 rounded-lg font-bold text-white text-lg transition duration-200 shadow-lg shadow-blue-500/50" disabled onclick="window.submitReport()">
+                        Registrar Missão(ões) e Atualizar Ranking
+                    </button>
+                </section>
+            `;
+        }
+        
+        window.renderRank = function() {
+            return `
+                <section class="space-y-4 pt-8">
+                    <h2 class="text-3xl font-bold text-red-400 text-center flex justify-center items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 8a1 1 0 000 2h6a1 1 0 100-2H7z" clip-rule="evenodd" /><path fill-rule="evenodd" d="M10 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zM5 10a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z" clip-rule="evenodd" /></svg>
+                        Rank dos Guardiões (Membros Cadastrados)
+                    </h2>
+                    <div class="bg-gray-800 p-4 rounded-xl shadow-xl overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-700">
+                            <thead class="bg-gray-700">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Rank</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">ID Guardião</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Total de Pontos</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Missões Concluídas</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ninjas-scoreboard" class="bg-gray-800 divide-y divide-gray-700">
+                                <!-- Scoreboard data will be inserted here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            `;
+        }
+
+        window.renderRelatorios = function() {
+            return `
+                <section class="space-y-4 pt-8">
+                    <h2 class="text-3xl font-bold text-blue-400 text-center">Registro Completo de Relatórios</h2>
+                    <div class="bg-gray-800 p-4 rounded-xl shadow-xl overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-700">
+                            <thead class="bg-gray-700">
+                                <tr>
+                                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-1/12">ID Relatório</th>
+                                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-2/12">Serviços/Rank</th>
+                                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-2/12">Executor/Auxílio</th>
+                                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-2/12">Clientes</th>
+                                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-3/12">Descrição</th>
+                                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-1/12">Data</th>
+                                </tr>
+                            </thead>
+                            <tbody id="reports-log" class="bg-gray-800 divide-y divide-gray-700">
+                                <!-- Report data will be inserted here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            `;
+        }
+
+        // Template HTML para a página de auxílio
+        window.renderAuxilio = function() {
+            return `
+                <section class="space-y-4 pt-8">
+                    <h2 class="text-3xl font-bold text-orange-400 text-center flex justify-center items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm4.5-9.5c0 .83-.67 1.5-1.5 1.5s-1.5-.67-1.5-1.5.67-1.5 1.5-1.5 1.5.67 1.5 1.5zM9 9c0-.83-.67-1.5-1.5-1.5S6 8.17 6 9s.67 1.5 1.5 1.5S9 9.83 9 9zm3 2.5c-2.33 0-4.38 1.15-5.69 2.84.03-.02.06-.04.09-.07C6.67 13.92 9.07 15 12 15s5.33-1.08 7.6-2.73c.03.03.06.05.09.07-1.31-1.69-3.36-2.84-5.69-2.84z"/></svg>
+                        Log de Auxílio (Potenciais Membros)
+                    </h2>
+                    <p class="text-center text-gray-400">Pessoas que participaram como auxílio e acumulam pontos separadamente.</p>
+                    <div class="bg-gray-800 p-4 rounded-xl shadow-xl overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-700">
+                            <thead class="bg-gray-700">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">ID Auxiliar</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Última Participação</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Pontos Acumulados</th>
+                                </tr>
+                            </thead>
+                            <tbody id="auxiliary-log" class="bg-gray-800 divide-y divide-gray-700">
+                                <!-- Auxiliary data will be inserted here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            `;
+        }
+
+        window.renderAutorizacao = function() {
+             const accessStatus = isMasterAdminMode ? 
+                `<div class="text-center text-green-400 font-bold text-lg p-2">✅ MASTER ADMIN ATIVO</div>` : 
+                (isWriterMode ? `<div class="text-yellow-400 font-bold text-lg p-2">✅ ESCRITOR DE RELATÓRIO ATIVO</div>` :
+                `<div class="text-center text-red-400 font-bold text-lg p-2">❌ ACESSO INATIVO</div>`);
+
+            return `
+                <!-- PAINEL DE AUTORIZAÇÃO (Login Customizado) -->
+                <section class="space-y-4 pt-4 pb-4 bg-gray-900 p-6 rounded-xl shadow-inner border border-blue-500/50">
+                     <h2 class="text-2xl font-bold text-blue-400 text-center flex justify-center items-center gap-2">
+                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2V7a5 5 0 00-5-5zm2 5v2h-4V7a3 3 0 016 0z"/></svg>
+                         Autorização de Escrita (ID & Senha Única)
+                     </h2>
+                     <p class="text-center text-gray-400">Insira seu ID e Senha fornecidos para liberar as funções de escrita e edição.</p>
+                     
+                     <div id="admin-status-display">${accessStatus}</div>
+
+                     <div class="flex flex-col md:flex-row gap-4 max-w-lg mx-auto">
+                         <input id="access-id-input" type="text" placeholder="Seu ID de Guardião/Admin" class="flex-grow p-2 rounded-lg bg-gray-700 border border-gray-600 text-white shadow-inner">
+                         <input id="access-key-input" type="password" placeholder="Sua Senha Única" class="flex-grow p-2 rounded-lg bg-gray-700 border border-gray-600 text-white shadow-inner">
+                         <!-- CORREÇÃO: Adicionado onclick para a função de verificação de acesso -->
+                         <button id="set-access-key-btn" class="w-full md:w-auto py-2 px-4 bg-blue-600 hover:bg-blue-700 rounded-lg font-bold text-white transition duration-200" onclick="window.checkAccessKey()">
+                             Verificar Acesso
+                         </button>
+                     </div>
+                </section>
+                
+                <!-- 5. CADASTRO: GUARDIÕES (MASTER ADMIN ONLY) -->
+                <section class="space-y-4 pt-8 pb-16">
+                    <h2 class="text-3xl font-bold text-yellow-400 text-center">Cadastro: Guardiões (Membros da Organização)</h2>
+                    <p class="text-center text-gray-400">Pessoas que pontuam no Rank dos Guardiões. <span class="text-red-400">Master Admin Apenas.</span></p>
+
+                    <!-- Add New Ninja Form (ADMIN ONLY) -->
+                    <div id="add-ninja-form" class="bg-gray-700 p-4 rounded-lg shadow-inner flex flex-col sm:flex-row gap-4 admin-only ${isMasterAdminMode ? '' : 'hidden'}">
+                        <input id="new-ninja-id" type="text" placeholder="ID do Novo Guardião (Ex: Dellzito)" class="flex-grow p-2 rounded-lg bg-gray-800 border border-gray-600 text-white">
+                        <button id="add-ninja" class="w-full sm:w-auto py-2 px-4 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-bold text-white transition duration-200" onclick="window.addNinja()">Adicionar Guardião</button>
+                    </div>
+
+                    <div class="bg-gray-800 p-4 rounded-xl shadow-xl overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-700">
+                            <thead class="bg-gray-700">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">ID Guardião</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider admin-only ${isMasterAdminMode ? '' : 'hidden'}">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ninjas-cadastro" class="bg-gray-800 divide-y divide-gray-700">
+                                <!-- Ninja data will be inserted here by renderNinjasTable() -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- 6. BANCO DE DADOS: MISSÕES E RANKS (MASTER ADMIN / WRITER MODE) -->
+                <section class="space-y-4 pt-8">
+                    <h2 class="text-3xl font-bold text-green-400 text-center">Gerenciamento de Missões (Quests)</h2>
+                    <p class="text-center text-gray-400">Adicione, edite ou exclua as quests disponíveis. <span class="${isWriterMode ? 'text-green-400' : 'text-red-400'}">Requer Autorização de Escrita.</span></p>
+                    
+                    <!-- Add New Mission Form (WRITER ONLY) -->
+                    <div id="add-mission-form" class="bg-gray-700 p-4 rounded-lg shadow-inner flex flex-col sm:flex-row gap-4 writer-only ${isWriterMode ? '' : 'hidden'}">
+                        <input id="new-mission-name" type="text" placeholder="Novo Nome da Missão" class="flex-grow p-2 rounded-lg bg-gray-800 border border-gray-600 text-white">
+                        <select id="new-mission-rank-select" class="w-full sm:w-32 p-2 rounded-lg bg-gray-800 border border-gray-600 text-white">
+                             <option value="S-Rank">S-Rank (5 Pts)</option>
+                             <option value="A-Rank">A-Rank (4 Pts)</option>
+                             <option value="B-Rank" selected>B-Rank (3 Pts)</option>
+                             <option value="C-Rank">C-Rank (2 Pts)</option>
+                             <option value="D-Rank">D-Rank (1 Pt)</option>
+                             <option value="Defesa/Raid">Defesa/Raid (10 Pts)</option>
+                             <option value="NPC Quest">NPC Quest (0 Pts)</option>
+                             <option value="Storyline">Storyline (0 Pts)</option>
+                        </select>
+                        <button id="add-mission" class="w-full sm:w-auto py-2 px-4 bg-green-600 hover:bg-green-700 rounded-lg font-bold text-white transition duration-200" onclick="window.addMission()">Adicionar Missão</button>
+                    </div>
+                    
+                    <div class="bg-gray-800 p-4 rounded-xl shadow-xl overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-700">
+                            <thead class="bg-gray-700">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Nome da Missão</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Rank Base</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Pontos</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider writer-only ${isWriterMode ? '' : 'hidden'}">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody id="missions-database" class="bg-gray-800 divide-y divide-gray-700">
+                                <!-- Mission data will be inserted here by renderMissionsDatabase() -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            `;
+        }
+        
         // Start application on load
         window.onload = function() {
             initializeFirebase();
