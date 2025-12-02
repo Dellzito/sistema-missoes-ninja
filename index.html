@@ -207,51 +207,106 @@
             return id.trim().toLowerCase();
         }
         
-        // --- FUNÇÕES DO MODAL ---
+        // --- FUNÇÕES DO MODAL (REVISADAS) ---
 
-        /** Exibe o modal customizado com uma mensagem de confirmação/ação. */
-        window.showCustomModal = function(title, message, isConfirmation = false, onConfirm = () => {}, inputType = null, inputValue = null) {
-            const modal = document.getElementById('custom-modal');
-            const modalTitle = document.getElementById('modal-title');
-            const modalMessage = document.getElementById('modal-message');
-            const modalActions = document.getElementById('modal-actions');
-            const modalConfirmBtn = document.getElementById('modal-confirm-btn');
-            const modalCancelBtn = document.getElementById('modal-cancel-btn');
-            const modalInputContainer = document.getElementById('modal-input-container');
-            
-            modalTitle.textContent = title;
-            modalMessage.textContent = message;
+        let resolveModalPromise = null; 
 
-            // Esconde/mostra ações e inputs conforme necessário
-            modalInputContainer.classList.add('hidden');
-            document.getElementById('modal-error').classList.add('hidden');
-            
-            if (isConfirmation) {
-                modalConfirmBtn.classList.remove('hidden');
-                modalActions.classList.remove('justify-end');
-                modalActions.classList.add('justify-between');
+        window.openCustomModal = function(title, message, type, data = {}) {
+            return new Promise(resolve => {
+                resolveModalPromise = resolve;
+
+                const modal = document.getElementById('custom-modal');
+                const modalTitle = document.getElementById('modal-title');
+                const modalMessage = document.getElementById('modal-message');
+                const inputContainer = document.getElementById('modal-input-container');
+                const input1 = document.getElementById('modal-input-1');
+                const selectRank = document.getElementById('modal-input-2');
+                const label1 = document.getElementById('input-label-1');
+                const label2 = document.getElementById('input-label-2');
+                const confirmBtn = document.getElementById('modal-confirm-btn');
+                const cancelBtn = document.getElementById('modal-cancel-btn');
+                const errorSpan = document.getElementById('modal-error');
                 
-                // Remove listeners antigos
-                modalConfirmBtn.onclick = null;
-                modalCancelBtn.onclick = null;
+                // Reset states
+                modalTitle.textContent = title;
+                modalMessage.textContent = message;
+                errorSpan.classList.add('hidden');
+                inputContainer.classList.add('hidden');
+                input1.value = '';
+                selectRank.innerHTML = ''; // Limpa o select
+                input1.type = 'text'; // Reseta o tipo de input
+                confirmBtn.onclick = null;
+                cancelBtn.onclick = null;
+                confirmBtn.classList.remove('hidden'); 
+                
+                // Configuração padrão para botões
+                confirmBtn.classList.remove('bg-red-600', 'hover:bg-red-700');
+                confirmBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
 
-                modalConfirmBtn.onclick = () => {
-                    modal.classList.add('hidden');
-                    onConfirm(true);
-                };
-                modalCancelBtn.onclick = () => {
-                    modal.classList.add('hidden');
-                    onConfirm(false);
-                };
-            } else {
-                // Apenas informativo
-                modalConfirmBtn.classList.add('hidden');
-                modalActions.classList.remove('justify-between');
-                modalActions.classList.add('justify-end');
-                modalCancelBtn.onclick = () => modal.classList.add('hidden');
+
+                if (type === 'confirm') {
+                    // Standard Confirmation/Delete
+                    confirmBtn.textContent = 'Confirmar';
+                    confirmBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+                    confirmBtn.classList.add('bg-red-600', 'hover:bg-red-700');
+                } else if (type === 'input') {
+                    // Mission Edit Input
+                    inputContainer.classList.remove('hidden');
+                    label1.textContent = 'Novo Nome da Missão:';
+                    input1.value = data.name || '';
+                    label2.textContent = 'Novo Rank:';
+                    
+                    // Populate Rank Select
+                    RANK_OPTIONS.forEach(rank => {
+                        const option = document.createElement('option');
+                        option.value = rank;
+                        option.textContent = rank;
+                        if (rank === data.rank) option.selected = true;
+                        selectRank.appendChild(option);
+                    });
+
+                    confirmBtn.textContent = 'Salvar Alterações';
+
+                    confirmBtn.onclick = () => {
+                        const newName = input1.value.trim();
+                        const newRank = selectRank.value;
+                        if (!newName || !newRank) {
+                            errorSpan.textContent = 'Nome e Rank não podem ser vazios.';
+                            errorSpan.classList.remove('hidden');
+                            return;
+                        }
+                        // Resolve the promise with the collected data
+                        closeCustomModal({ name: newName, rank: newRank });
+                    };
+                } else if (type === 'ninjaEdit') {
+                    // Ninja Status Edit (simplified as confirmation)
+                    const statusText = data.isActive ? 'Ativo' : 'Inativo';
+                    const newStatusText = data.isActive ? 'INATIVO' : 'ATIVO';
+
+                    modalMessage.innerHTML = `O Guardião **${data.id}** está atualmente <span class="font-bold ${data.isActive ? 'text-green-400' : 'text-red-400'}">${statusText}</span>. Deseja alternar o status para **${newStatusText}**?`;
+                    confirmBtn.textContent = `Alternar para ${newStatusText}`;
+                }
+
+
+                cancelBtn.onclick = () => closeCustomModal(false);
+                // Default confirm action for 'confirm' or 'ninjaEdit' types
+                if (type === 'confirm' || type === 'ninjaEdit') {
+                     confirmBtn.onclick = confirmBtn.onclick || (() => closeCustomModal(true));
+                }
+
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+            });
+        }
+
+        function closeCustomModal(result) {
+            const modal = document.getElementById('custom-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            if (resolveModalPromise) {
+                resolveModalPromise(result);
+                resolveModalPromise = null;
             }
-
-            modal.classList.remove('hidden');
         }
         
         // Helper function to calculate total points, rank, and gather all data
@@ -402,7 +457,7 @@
         // Implementação: Submete o formulário (REAL FIREBASE WRITE)
         window.submitReport = async function() {
             if (!isWriterMode) {
-                 window.showCustomModal('Acesso Negado', 'Você precisa de permissão de Escritor ou Admin para registrar relatórios.', false);
+                 window.openCustomModal('Acesso Negado', 'Você precisa de permissão de Escritor ou Admin para registrar relatórios.', 'info');
                  return;
             }
 
@@ -410,7 +465,7 @@
             const statusElement = document.getElementById('status');
 
             if (!data || data.executorIds.length === 0 || data.totalPointsRaw === 0) {
-                 window.showCustomModal('Erro', 'O relatório deve ter pelo menos uma missão que pontua e um executor selecionado.', false);
+                 window.openCustomModal('Erro', 'O relatório deve ter pelo menos uma missão que pontua e um executor selecionado.', 'info');
                  return;
             }
 
@@ -536,7 +591,7 @@
         // IMPLEMENTAÇÃO REAL DO ADD NINJA
         window.addNinja = async function() {
             if (!isMasterAdminMode) {
-                window.showCustomModal('Acesso Negado', 'Você precisa de permissão de Admin Master para adicionar Guardiões.', false);
+                window.openCustomModal('Acesso Negado', 'Você precisa de permissão de Admin Master para adicionar Guardiões.', 'info');
                 return;
             }
 
@@ -577,6 +632,9 @@
                 statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
                 setTimeout(() => statusElement.classList.add('hidden'), 5000);
 
+                // CORREÇÃO: Força a atualização do seletor de executor na aba 'Criar Relatório'
+                window.updateExecutorSelect();
+
             } catch (e) {
                 console.error("Erro ao adicionar Guardião:", e);
                 statusElement.textContent = `❌ Erro ao adicionar Guardião: ${e.message}`;
@@ -588,10 +646,10 @@
         // IMPLEMENTAÇÃO DE DELETE NINJA
         window.deleteNinja = function(id) { 
             if (!isMasterAdminMode) {
-                 window.showCustomModal('Acesso Negado', 'Você precisa de permissão de Admin Master para excluir Guardiões.', false);
+                 window.openCustomModal('Acesso Negado', 'Você precisa de permissão de Admin Master para excluir Guardiões.', 'info');
                  return;
             }
-            window.showCustomModal('Confirmação de Exclusão', `Tem certeza que deseja excluir o Guardião '${id}'? (Ação permanente e exige Admin Master).`, true, async (confirmed) => {
+            window.openCustomModal('Confirmação de Exclusão', `Tem certeza que deseja excluir o Guardião '${id}'? (Ação permanente e exige Admin Master).`, 'confirm', async (confirmed) => {
                  if (confirmed) {
                      const statusElement = document.getElementById('status');
                      statusElement.classList.remove('hidden');
@@ -618,13 +676,13 @@
         }
 
         window.editNinja = function(id) { 
-             window.showCustomModal('Ação de Edição', `Função de edição de Guardião '${id}' acionada. A lógica de back-end (editar status/pontos) ainda não foi implementada, mas a permissão está OK.`, false);
+             window.openCustomModal('Ação de Edição', `Função de edição de Guardião '${id}' acionada. A lógica de back-end (editar status/pontos) ainda não foi implementada, mas a permissão está OK.`, 'info');
         }
         
         // IMPLEMENTAÇÃO REAL DO ADD MISSION (Revisada)
         window.addMission = async function() {
             if (!isWriterMode) {
-                window.showCustomModal('Acesso Negado', 'Você precisa de permissão de Escritor ou Admin para adicionar missões.', false);
+                window.openCustomModal('Acesso Negado', 'Você precisa de permissão de Escritor ou Admin para adicionar missões.', 'info');
                 return;
             }
 
@@ -681,7 +739,7 @@
         // NOVO: IMPLEMENTAÇÃO DE EDIÇÃO DE MISSÃO COM O MODAL
         window.editMission = function(encodedId, encodedName, encodedRank) { 
             if (!isWriterMode) {
-                window.showCustomModal('Acesso Negado', 'Você precisa de permissão de Escritor ou Admin para editar missões.', false);
+                window.openCustomModal('Acesso Negado', 'Você precisa de permissão de Escritor ou Admin para editar missões.', 'info');
                 return;
             }
             
@@ -689,18 +747,10 @@
             const currentName = decodeURIComponent(encodedName);
             const currentRank = decodeURIComponent(encodedRank);
             
-            window.showCustomModal('Editar Missão', 'Altere o nome e o rank da missão abaixo. Confirme para salvar no Firebase.', true, async (confirmed) => {
-                 if (confirmed) {
-                     const newName = document.getElementById('modal-input-1').value.trim();
-                     const newRank = document.getElementById('modal-input-2').value;
+            window.openCustomModal('Editar Missão', 'Altere o nome e o rank da missão abaixo. Confirme para salvar no Firebase.', 'input', { name: currentName, rank: currentRank }).then(async (result) => {
+                 if (result && result !== false) {
+                     const { name: newName, rank: newRank } = result;
                      const statusElement = document.getElementById('status');
-                     
-                     if (!newName || !newRank) {
-                         statusElement.textContent = '❌ Nome e Rank não podem ser vazios.';
-                         statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
-                         setTimeout(() => statusElement.classList.add('hidden'), 5000);
-                         return;
-                     }
                      
                      statusElement.classList.remove('hidden');
                      statusElement.className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
@@ -742,17 +792,17 @@
                       setTimeout(() => statusElement.classList.add('hidden'), 7000);
                      
                  }
-            }, 'input', { name: currentName, rank: currentRank });
+            });
         }
         
         // IMPLEMENTAÇÃO DE DELETE MISSION
         window.deleteMission = function(id) { 
             if (!isWriterMode) {
-                 window.showCustomModal('Acesso Negado', 'Você precisa de permissão de Escritor ou Admin para excluir missões.', false);
+                 window.openCustomModal('Acesso Negado', 'Você precisa de permissão de Escritor ou Admin para excluir missões.', 'info');
                  return;
             }
             const decodedId = decodeURIComponent(id);
-            window.showCustomModal('Confirmação de Exclusão', `Tem certeza que deseja excluir a Missão '${decodedId}'? (Ação permanente).`, true, async (confirmed) => {
+            window.openCustomModal('Confirmação de Exclusão', `Tem certeza que deseja excluir a Missão '${decodedId}'? (Ação permanente).`, 'confirm', async (confirmed) => {
                  if (confirmed) {
                      const statusElement = document.getElementById('status');
                      statusElement.classList.remove('hidden');
@@ -1315,7 +1365,6 @@
                 ninjasData = {};
                 snapshot.forEach(doc => {
                     const data = doc.data();
-                    data.id = doc.id; 
                     ninjasData[data.id] = data;
                 });
                  // Chamada de atualização direta para garantir a população do select
