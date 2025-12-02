@@ -1171,9 +1171,11 @@
         // NOVO: Função para recalcular o Rank de todos os Guardiões e Auxiliares 
         // Suprime o modal de confirmação se calledInternally for true
         window.recalculateAllRanks = async function(calledInternally = false) {
-            if (!isMasterAdminMode) { // ALTERADO PARA MASTER ADMIN
-                window.openCustomModal('Acesso Negado', 'Você precisa de permissão Master Admin para recalcular os Ranks.', 'info');
-                return;
+            // Permissão agora é checada por isWriterMode ou isMasterAdminMode (já que o botão só aparece para eles)
+            if (!isWriterMode) { 
+                 // Esta checagem é redundante se o botão estiver no lugar certo, mas garante segurança.
+                 if (!calledInternally) window.openCustomModal('Acesso Negado', 'Você precisa de permissão de Escritor ou Admin para recalcular os Ranks.', 'info');
+                 return;
             }
 
             if (!calledInternally) {
@@ -1214,7 +1216,6 @@
                 });
 
                 // 1. Zera todos os pontos no Firebase (Phase 1 Commit)
-                // OBS: Esta etapa é redundante se o onSnapshot não estiver totalmente pronto, mas garante consistência.
                 let resetBatch = writeBatch(db);
                 Object.values(ninjasData).forEach(ninja => {
                     const ninjaRef = doc(db, COLLECTIONS.NINJAS, ninja.id);
@@ -1252,6 +1253,8 @@
                             if (highestIndex === -1 || currentIndex < highestIndex) {
                                 highestRank = mission.baseRank;
                             }
+                        } else {
+                            // Se a missão foi deletada (mission é undefined), os pontos são 0 para ela.
                         }
                     });
 
@@ -2300,16 +2303,20 @@
                     </div>
                 </section>
 
-                <!-- Master Admin Tools (Recálculo e Exclusão) -->
-                <div id="admin-tools" class="pt-8 space-y-4 admin-only ${isMasterAdminMode ? '' : 'hidden'}">
+                <!-- Ferramentas de Recálculo e Exclusão -->
+                <div id="writer-tools" class="pt-8 space-y-4 writer-only ${isWriterMode ? '' : 'hidden'}">
                     
-                    <h3 class="text-xl font-bold text-blue-400 border-b border-blue-400/50 pb-2">Ferramentas de Recálculo (Admin Master)</h3>
+                    <!-- RECALCULO AGORA É WRITER-ONLY -->
+                    <h3 class="text-xl font-bold text-blue-400 border-b border-blue-400/50 pb-2">Ferramentas de Recálculo (Escritor/Admin Master)</h3>
                     <p class="text-gray-400">Use este botão APÓS alterar os pontos de uma missão no Gerenciamento de Missões para atualizar o Rank de todos os Guardiões de forma retroativa.</p>
                     <button onclick="window.recalculateAllRanks()" class="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 rounded-lg font-bold text-white text-lg transition duration-200">
                         🔄 Recalcular Todos os Ranks Agora
                     </button>
+                </div>
 
-                    <h3 class="text-xl font-bold text-red-500 border-b border-red-500/50 pb-2 pt-4">Ferramentas de Exclusão (Admin Master)</h3>
+                <!-- Master Admin Tools (Exclusão) - APENAS ADMIN MASTER -->
+                <div id="admin-tools" class="pt-4 space-y-4 admin-only ${isMasterAdminMode ? '' : 'hidden'}">
+                    <h3 class="text-xl font-bold text-red-500 border-b border-red-500/50 pb-2">Ferramentas de Exclusão (Admin Master)</h3>
                     <p class="text-gray-400">Use com extrema cautela. A exclusão de logs é IRREVERSÍVEL. A exclusão de relatórios ZERA os Ranks.</p>
                     <div class="flex flex-col sm:flex-row gap-4">
                         <button onclick="window.clearAuxiliaryLog()" class="w-full py-2 px-4 bg-red-700 hover:bg-red-800 rounded-lg font-bold text-white transition duration-200">
@@ -2320,8 +2327,6 @@
                         </button>
                     </div>
                 </div>
-                
-                <!-- O bloco writer-tools original foi removido, as ferramentas estão agora em admin-tools -->
 
                 <!-- 6. BANCO DE DADOS: MISSÕES E RANKS (MASTER ADMIN / WRITER MODE) -->
                 <section class="space-y-4 pt-8">
