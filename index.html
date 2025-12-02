@@ -299,6 +299,7 @@
         import { getFirestore, doc, setDoc, onSnapshot, collection, query, orderBy, deleteDoc, writeBatch, setLogLevel, updateDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Implementação simples de SHA-256 para hashing de senhas.
+        // Essa função precisa ser síncrona para simplificar a comparação no loop
         async function hashSha256(message) {
             const encoder = new TextEncoder();
             const data = encoder.encode(message);
@@ -322,22 +323,33 @@
 
         // ====================================================================
         // CHAVES MESTRAS SECRETAS (Até 12, Lidas do Ambiente de Hospedagem)
-        // O código prioriza process.env.ADMIN_KEY_N.
-        // Se a variável de ambiente não for encontrada (ex: rodando localmente sem Vercel),
-        // ele usará a CHAVE DE FALLBACK.
-        const FALLBACK_KEY_HASH = '1f40954b07e786b460d05c0836551b9e27c191a92e106b12a81387d894e666a3'; // Hash de 'DEVTEST'
-        let SECRET_KEY_HASHES = []; 
+        // Usamos variáveis globais injetadas por Vercel/Netlify.
+        const FALLBACK_KEY = 'DEVTEST'; 
+        let SECRET_KEYS_FROM_ENV = []; 
 
-        // Tenta buscar 12 chaves do ambiente
+        // Tenta carregar 12 chaves. O Vercel injeta variáveis de ambiente como strings literais.
+        // O valor de `process.env` é lido do arquivo vercel.json.
         for (let i = 1; i <= 12; i++) {
-            const key = (typeof process !== 'undefined' && process.env && process.env[`ADMIN_KEY_${i}`]) 
-                ? process.env[`ADMIN_KEY_${i}`] 
-                : (i === 1 ? FALLBACK_KEY_HASH : null); // Apenas ADMIN_KEY_1 usa o fallback
+            // Acesso direto à variável global criada pelo build (VERCEL_ADMIN_KEY_N)
+            // Se Vercel injetar a variável globalmente, ela será lida aqui.
+            // Se Vercel não injetar, usamos o fallback.
+            let key = null;
 
-            if (key) {
-                // Se a chave for um hash (64 caracteres) ou uma chave em texto plano
-                SECRET_KEY_HASHES.push(key);
+            // Tentativa de ler a variável global injetada (pode variar por ambiente)
+            if (window[`VERCEL_ADMIN_KEY_${i}`]) {
+                key = window[`VERCEL_ADMIN_KEY_${i}`];
+            } else if (i === 1) {
+                key = FALLBACK_KEY;
             }
+
+            if (key && key !== 'undefined' && key !== 'null') {
+                SECRET_KEYS_FROM_ENV.push(key);
+            }
+        }
+
+        // Se nenhuma chave foi carregada (exceto o fallback), garantimos que o fallback esteja presente para o primeiro teste.
+        if (SECRET_KEYS_FROM_ENV.length === 0 && FALLBACK_KEY) {
+            SECRET_KEYS_FROM_ENV.push(FALLBACK_KEY);
         }
         
         let isAdminMode = false;
@@ -441,32 +453,9 @@
                 return;
             }
 
-            // 1. Hash da chave digitada pelo usuário
-            let keyHash;
-            try {
-                keyHash = await hashSha256(adminKey);
-            } catch (e) {
-                console.error("Erro ao gerar hash:", e);
-                statusElement.textContent = '❌ Erro ao processar a chave. Tente novamente.';
-                statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
-                return;
-            }
-            
-            // 2. Compara o hash gerado com os hashes armazenados (se estiverem em texto plano)
-            // Se as chaves do ambiente já estiverem em hash, verifica a correspondência.
-            const isMatch = SECRET_KEY_HASHES.some(storedHashOrKey => {
-                 // Verifica se o valor armazenado é o hash (64 caracteres)
-                 if (storedHashOrKey.length === 64) {
-                    return storedHashOrKey === keyHash;
-                 } else {
-                    // Se o valor armazenado não for um hash (ex: fallback local), hasheia e compara.
-                    // Isso é complexo e não recomendado. Para simplificar, assumimos que as 
-                    // chaves do Vercel são a CHAVE PLANA.
-                    // ATENÇÃO: Por simplicidade e desempenho, vamos assumir que as chaves
-                    // do Vercel estão em TEXTO PLANO e hasheá-las ANTES da comparação.
-                    // Isso significa que você deve digitar a CHAVE SECRETA (ex: KonohaAdmin42) no Vercel.
-                    return storedHashOrKey === adminKey; 
-                 }
+            // Acesso Confiável (Verifica todas as chaves secretas)
+            const isMatch = SECRET_KEYS_FROM_ENV.some(storedKey => {
+                 return storedKey === adminKey;
             });
 
             if (isMatch) {
