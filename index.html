@@ -303,7 +303,7 @@
         // --------------------------------------------------------------------
         
         // 1. Defina um ID ÚNICO para o seu App/Guilda.
-        const APP_IDENTIFIER = 'guilda-konoha-2024'; // EX: guilda-konoha-2024
+        const APP_IDENTIFIER = 'guilda-konoha-2024';
         
         // 2. Cole a configuração JSON do seu projeto Firebase aqui.
         const FIREBASE_CONFIG_JSON = null; 
@@ -317,10 +317,16 @@
         const initialAuthToken = INITIAL_AUTH_TOKEN;
 
         // ====================================================================
-        // CHAVE MESTRA SECRETA (Será lida do Ambiente de Hospedagem)
-        // Se estiver rodando localmente (sem deploy), use um valor temporário AQUI.
-        // Se estiver no Vercel/Netlify, o valor de process.env.ADMIN_MASTER_KEY será usado.
-        const ADMIN_MASTER_KEY_SECRET = (typeof process !== 'undefined' && process.env.ADMIN_MASTER_KEY) ? process.env.ADMIN_MASTER_KEY : 'CHAVEDEMODEFAULT'; 
+        // CHAVE MESTRA SECRETA (Lida do Ambiente de Hospedagem)
+        // O código prioriza process.env.ADMIN_MASTER_KEY.
+        // Se a variável de ambiente não for encontrada (ex: rodando localmente sem Vercel),
+        // ele usará a CHAVE DE FALLBACK.
+        // **SUBSTITUA O VALOR DA CHAVE DE FALLBACK ABAIXO**
+        const FALLBACK_KEY = 'DEVTEST'; 
+
+        const ADMIN_MASTER_KEY_SECRET = (typeof process !== 'undefined' && process.env && process.env.ADMIN_MASTER_KEY) 
+            ? process.env.ADMIN_MASTER_KEY 
+            : FALLBACK_KEY; 
 
         let isAdminMode = false;
         // ====================================================================
@@ -416,7 +422,7 @@
 
             const statusElement = document.getElementById('status');
             
-            // Agora verifica se a chave digitada corresponde à chave SECRETA do ambiente.
+            // Verifica se a chave digitada corresponde à chave SECRETA (Vercel ou Fallback).
             if (adminKey === ADMIN_MASTER_KEY_SECRET) {
                 // Se a chave estiver correta, o ID digitado se torna o ID do Admin
                 window.toggleAdminUI(true);
@@ -541,7 +547,7 @@
             }
 
             try {
-                // Remove apiKey da configuração dummy, pois causou o erro de validação (auth/api-key-not-valid).
+                // Configuração padrão para o Firestore (sem Auth API Key)
                 const configToUse = firebaseConfig || {
                     authDomain: "dummy.firebaseapp.com",
                     projectId: appId, 
@@ -550,48 +556,19 @@
                 app = initializeApp(configToUse);
                 db = getFirestore(app);
 
-                if (firebaseConfig) {
-                    // Se houver uma configuração real (com apiKey válido), tenta autenticar.
-                    auth = getAuth(app);
-
-                    if (initialAuthToken) {
-                        await signInWithCustomToken(auth, initialAuthToken);
-                    } else {
-                        await signInAnonymously(auth);
-                    }
-
-                    onAuthStateChanged(auth, (user) => {
-                        if (user) {
-                            userId = user.uid;
-                            authReady = true;
-                            document.getElementById('auth-info').textContent = `Usuário ID (Auth): ${userId} | App ID (DB Contexto): ${appId}`;
-                            setupFirestoreListeners();
-                            generateProofId(); 
-                            addMissionEntry(); 
-                            document.getElementById('submit-report').disabled = false;
-                        } else {
-                            userId = null;
-                            authReady = true; 
-                            document.getElementById('auth-info').textContent = `Usuário Anônimo. App ID (DB Contexto): ${appId}`;
-                            setupFirestoreListeners(); 
-                        }
-                    });
-                } else {
-                    // Se não houver config real (modo local/dummy), simula o estado de autenticação
-                    // para desbloquear o app para uso anônimo local e evita a falha do Auth.
-                    userId = 'anon-local-' + Math.random().toString(36).substring(2, 6);
-                    authReady = true;
-                    document.getElementById('auth-info').textContent = `Usuário ID (Local Anônimo): ${userId} | App ID (DB Contexto): ${appId}`;
-                    setupFirestoreListeners();
-                    generateProofId(); 
-                    addMissionEntry(); 
-                    document.getElementById('submit-report').disabled = false;
-                }
+                // Como não usamos Auth API Key, forçamos um ID de usuário anônimo local
+                userId = 'anon-local-' + Math.random().toString(36).substring(2, 6);
+                authReady = true;
+                document.getElementById('auth-info').textContent = `Usuário ID (Local Anônimo): ${userId} | App ID (DB Contexto): ${appId}`;
+                setupFirestoreListeners();
+                generateProofId(); 
+                addMissionEntry(); 
+                document.getElementById('submit-report').disabled = false;
 
             } catch (error) {
-                console.error("Erro na inicialização ou autenticação do Firebase:", error);
+                console.error("Erro na inicialização do Firebase:", error);
                 document.getElementById('status').className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
-                document.getElementById('status').textContent = `Erro ao conectar: ${error.message}. Se você está vendo este erro, por favor insira o seu FIREBASE_CONFIG_JSON.`;
+                document.getElementById('status').textContent = `Erro ao conectar: ${error.message}. Verifique o console para detalhes.`;
             }
         }
 
@@ -926,8 +903,8 @@
                     const currentRank = cleanRankForLookup(mission.baseRank);
                     const highestRankClean = cleanRankForLookup(highestRank);
 
-                    const currentIndex = RANK_ORDER.findIndex(r => currentRank.startsWith(r.toUpperCase()));
-                    const highestIndex = RANK_ORDER.findIndex(r => highestRankClean.startsWith(r.toUpperCase()));
+                    const currentIndex = RANK_ORDER.findIndex(r => rankA.startsWith(r.toUpperCase()));
+                    const highestIndex = RANK_ORDER.findIndex(r => rankB.startsWith(r.toUpperCase()));
 
                     if (highestIndex === -1 || currentIndex < highestIndex) {
                         highestRank = mission.baseRank;
