@@ -201,8 +201,8 @@
                 
                 document.getElementById('auth-info').textContent = `Usuário ID (Anon): ${userId} | App ID (DB Contexto): ${appId}`;
                 setupFirestoreListeners(); // Inicia os listeners de dados
-                renderPage(currentPage);
-                generateReportId(); 
+                window.renderPage(currentPage);
+                window.generateReportId(); 
                 
 
             } catch (error) {
@@ -235,7 +235,7 @@
                 if (Object.keys(missionsData).length === 0) {
                      seedInitialData(db);
                 }
-                if (['report_form', 'admin_panel'].includes(currentPage)) renderPage(currentPage);
+                if (['report_form', 'admin_panel'].includes(currentPage)) window.renderPage(currentPage);
             });
 
             // 2. Ninjas / Cadastro e Scoreboard
@@ -246,7 +246,7 @@
                     data.id = doc.id; 
                     ninjasData[data.id] = data;
                 });
-                if (['report_form', 'scoreboard', 'admin_panel', 'ninja_panel'].includes(currentPage)) renderPage(currentPage);
+                if (['report_form', 'scoreboard', 'admin_panel', 'ninja_panel'].includes(currentPage)) window.renderPage(currentPage);
             });
             
             // 3. Log de Auxílio
@@ -256,14 +256,14 @@
                     const data = doc.data();
                     auxiliaryData[data.id] = data;
                 });
-                if (['auxiliary_log', 'ninja_panel'].includes(currentPage)) renderPage(currentPage);
+                if (['auxiliary_log', 'ninja_panel'].includes(currentPage)) window.renderPage(currentPage);
             });
 
             // 4. Relatórios / Logs
             onSnapshot(collection(db, COLLECTIONS.REPORTS), (snapshot) => {
                 reportsData = [];
                 snapshot.forEach(doc => reportsData.push(doc.data()));
-                if (['reports_log', 'ninja_panel'].includes(currentPage)) renderPage(currentPage);
+                if (['reports_log', 'ninja_panel'].includes(currentPage)) window.renderPage(currentPage);
             });
         }
         
@@ -363,7 +363,7 @@
                 }
             });
             // Re-renderiza a página atual para aplicar as permissões
-            renderPage(currentPage);
+            window.renderPage(currentPage);
         }
 
         window.toggleMasterAdminUI = function(isAuthorized) {
@@ -379,7 +379,7 @@
                 }
             });
             // Re-renderiza a página atual para aplicar as permissões
-            renderPage(currentPage);
+            window.renderPage(currentPage);
         }
         
         window.checkAccessKey = async function() {
@@ -460,11 +460,11 @@
                         break;
                     }
                     // Funções de inicialização específicas para a página de relatório
-                    updateMissionSelects(false); 
-                    updateExecutorSelect();
-                    updateExecutorTags(false); 
-                    generateReportId();
-                    addMissionEntry(null, false); 
+                    window.updateMissionSelects(false); 
+                    window.updateExecutorSelect();
+                    window.updateExecutorTags(false); 
+                    window.generateReportId();
+                    window.addMissionEntry(null, false); 
                     window.updateDescriptionPreview();
                     break;
                 case 'scoreboard':
@@ -477,116 +477,22 @@
                     break;
                 case 'auxiliary_log':
                     contentDiv.innerHTML = renderAuxilio();
-                    renderAuxiliaryLog();
+                    renderAuxilio();
                     break;
                 case 'admin_panel':
                     contentDiv.innerHTML = renderAutorizacao(); // Novo nome da aba
                     break;
                 case 'ninja_panel':
                     contentDiv.innerHTML = renderNinjaPanel();
-                    renderReportsLogFiltered();
+                    window.renderReportsLogFiltered();
                     break;
                 default:
                     contentDiv.innerHTML = renderHome();
             }
         }
 
-        // NOVO: Template da aba Autorização (antigo Painel Admin)
-        function renderAutorizacao() {
-             const accessStatus = isMasterAdminMode ? 
-                `<div class="text-center text-green-400 font-bold text-lg p-2">✅ MASTER ADMIN ATIVO</div>` : 
-                (isWriterMode ? `<div class="text-center text-yellow-400 font-bold text-lg p-2">✅ ESCRITOR DE RELATÓRIO ATIVO</div>` :
-                `<div class="text-center text-red-400 font-bold text-lg p-2">❌ ACESSO INATIVO</div>`);
-
-            return `
-                <!-- PAINEL DE AUTORIZAÇÃO (Login Customizado) -->
-                <section class="space-y-4 pt-4 pb-4 bg-gray-900 p-6 rounded-xl shadow-inner border border-blue-500/50">
-                     <h2 class="text-2xl font-bold text-blue-400 text-center flex justify-center items-center gap-2">
-                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2V7a5 5 0 00-5-5zm2 5v2h-4V7a3 3 0 016 0z"/></svg>
-                         Autorização de Escrita (ID & Senha Única)
-                     </h2>
-                     <p class="text-center text-gray-400">Insira seu ID e Senha fornecidos para liberar as funções de escrita e edição.</p>
-                     
-                     <div id="admin-status-display">${accessStatus}</div>
-
-                     <div class="flex flex-col md:flex-row gap-4 max-w-lg mx-auto">
-                         <input id="access-id-input" type="text" placeholder="Seu ID de Guardião/Admin" class="flex-grow p-2 rounded-lg bg-gray-700 border border-gray-600 text-white shadow-inner">
-                         <input id="access-key-input" type="password" placeholder="Sua Senha Única" class="flex-grow p-2 rounded-lg bg-gray-700 border border-gray-600 text-white shadow-inner">
-                         <button id="set-access-key-btn" class="w-full md:w-auto py-2 px-4 bg-blue-600 hover:bg-blue-700 rounded-lg font-bold text-white transition duration-200">
-                             Verificar Acesso
-                         </button>
-                     </div>
-                </section>
-                
-                <!-- 5. CADASTRO: GUARDIÕES (MASTER ADMIN ONLY) -->
-                <section class="space-y-4 pt-8 pb-16">
-                    <h2 class="text-3xl font-bold text-yellow-400 text-center">Cadastro: Guardiões (Membros da Organização)</h2>
-                    <p class="text-center text-gray-400">Pessoas que pontuam no Rank dos Guardiões. <span class="text-red-400">Master Admin Apenas.</span></p>
-
-                    <!-- Add New Ninja Form (ADMIN ONLY) -->
-                    <div id="add-ninja-form" class="bg-gray-700 p-4 rounded-lg shadow-inner flex flex-col sm:flex-row gap-4 admin-only ${isMasterAdminMode ? '' : 'hidden'}">
-                        <input id="new-ninja-id" type="text" placeholder="ID do Novo Guardião (Ex: Dellzito)" class="flex-grow p-2 rounded-lg bg-gray-800 border border-gray-600 text-white">
-                        <button id="add-ninja" class="w-full sm:w-auto py-2 px-4 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-bold text-white transition duration-200" onclick="window.addNinja()">Adicionar Guardião</button>
-                    </div>
-
-                    <div class="bg-gray-800 p-4 rounded-xl shadow-xl overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-700">
-                            <thead class="bg-gray-700">
-                                <tr>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">ID Guardião</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider admin-only ${isMasterAdminMode ? '' : 'hidden'}">Ação</th>
-                                </tr>
-                            </thead>
-                            <tbody id="ninjas-cadastro" class="bg-gray-800 divide-y divide-gray-700">
-                                <!-- Ninja data will be inserted here by renderNinjasTable() -->
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
-
-                <!-- 6. BANCO DE DADOS: MISSÕES E RANKS (MASTER ADMIN / WRITER MODE) -->
-                <section class="space-y-4 pt-8">
-                    <h2 class="text-3xl font-bold text-green-400 text-center">Gerenciamento de Missões (Quests)</h2>
-                    <p class="text-center text-gray-400">Adicione, edite ou exclua as quests disponíveis. <span class="${isWriterMode ? 'text-green-400' : 'text-red-400'}">Requer Autorização de Escrita.</span></p>
-                    
-                    <!-- Add New Mission Form (WRITER ONLY) -->
-                    <div id="add-mission-form" class="bg-gray-700 p-4 rounded-lg shadow-inner flex flex-col sm:flex-row gap-4 writer-only ${isWriterMode ? '' : 'hidden'}">
-                        <input id="new-mission-name" type="text" placeholder="Novo Nome da Missão" class="flex-grow p-2 rounded-lg bg-gray-800 border border-gray-600 text-white">
-                        <select id="new-mission-rank-select" class="w-full sm:w-32 p-2 rounded-lg bg-gray-800 border border-gray-600 text-white">
-                             <option value="S-Rank">S-Rank (5 Pts)</option>
-                             <option value="A-Rank">A-Rank (4 Pts)</option>
-                             <option value="B-Rank" selected>B-Rank (3 Pts)</option>
-                             <option value="C-Rank">C-Rank (2 Pts)</option>
-                             <option value="D-Rank">D-Rank (1 Pt)</option>
-                             <option value="Defesa/Raid">Defesa/Raid (10 Pts)</option>
-                             <option value="NPC Quest">NPC Quest (0 Pts)</option>
-                             <option value="Storyline">Storyline (0 Pts)</option>
-                        </select>
-                        <button id="add-mission" class="w-full sm:w-auto py-2 px-4 bg-green-600 hover:bg-green-700 rounded-lg font-bold text-white transition duration-200" onclick="window.addMission()">Adicionar Missão</button>
-                    </div>
-                    
-                    <div class="bg-gray-800 p-4 rounded-xl shadow-xl overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-700">
-                            <thead class="bg-gray-700">
-                                <tr>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Nome da Missão</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Rank Base</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Pontos</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider writer-only ${isWriterMode ? '' : 'hidden'}">Ação</th>
-                                </tr>
-                            </thead>
-                            <tbody id="missions-database" class="bg-gray-800 divide-y divide-gray-700">
-                                <!-- Mission data will be inserted here by renderMissionsDatabase() -->
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
-            `;
-        }
-        
-        function renderHome() {
-            return `
+        // --- TEMPLATES ---
+        function renderHome() { /* ... */ return `
                 <section class="text-center py-20 bg-gray-800 rounded-xl shadow-2xl space-y-8">
                     <h2 class="text-3xl font-bold text-green-400">Bem-vindo(a) à Folha de Rosto Ninja!</h2>
                     <p class="text-lg text-gray-300 max-w-2xl mx-auto">
@@ -605,11 +511,9 @@
                         </button>
                     </div>
                 </section>
-            `;
-        }
+            `; }
 
-        function renderCriarRelatorio() {
-            return `
+        function renderCriarRelatorio() { return `
                 <section id="report-form-section" class="bg-gray-800 p-6 rounded-xl shadow-2xl space-y-6">
                     <h2 class="text-3xl font-semibold border-b pb-3 border-gray-700 text-blue-300 text-center">Formulário de Registro de Missão</h2>
 
@@ -660,298 +564,7 @@
                             <label for="report-id-display" class="block text-sm font-medium text-gray-300">ID Único do Relatório (Código de Registro)</label>
                             <div class="flex gap-2">
                                 <input id="report-id-display" type="text" readonly class="w-full p-2.5 rounded-lg bg-gray-600/50 border border-gray-600 text-purple-300 font-mono shadow-inner cursor-not-allowed" value="Gerado Automaticamente">
-                                <button type="button" onclick="copyReportId()" class="p-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition duration-200" title="Copiar ID para o Discord">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M7 9a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1zm0 4a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1z" /><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a1 1 0 00-1 1v2a1 1 0 102 0V6a1 1 0 00-1-1zm2 13a1 1 0 001-1v-2a1 1 0 10-2 0v2a1 1 0 001 1z" clip-rule="evenodd" /></svg>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="pt-4 space-y-4 border-t border-gray-700/50">
-                        <h3 class="text-xl font-medium text-gray-300 flex justify-between items-center">
-                            Missões Concluídas Neste Relatório
-                            <button id="add-mission-btn" class="py-1 px-3 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition duration-200 shadow-md flex items-center gap-1">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" /></svg>
-                                Adicionar Missão
-                            </button>
-                        </h3>
-
-                        <!-- Contêiner de Entrada de Missões -->
-                        <div id="missions-entry-container" class="space-y-3">
-                            <!-- Mission entries will be added here -->
-                        </div>
-
-                        <!-- Resumo de Pontos e Rank -->
-                        <div class="grid grid-cols-2 gap-4 pt-4">
-                            <div class="space-y-2 lg:col-span-2">
-                                <label class="block text-sm font-medium text-gray-300">Total de Pontos (Pontos Brutos da Missão)</label>
-                                <input id="total-points" type="text" readonly class="w-full p-2.5 rounded-lg bg-gray-600/50 border border-gray-600 text-green-400 font-bold shadow-inner cursor-not-allowed" value="0">
-                            </div>
-                            <!-- REMOVIDO: Pontos p/ Pessoa (Estimado) -->
-                        </div>
-                    </div>
-
-                    <!-- Preview da Descrição -->
-                    <div class="pt-4 space-y-2 border-t border-gray-700/50">
-                        <h3 class="text-xl font-medium text-gray-300">Preview da Descrição do Relatório:</h3>
-                        <div id="description-preview" class="p-4 bg-gray-700 rounded-lg text-gray-300 italic min-h-[50px]">
-                            A descrição do relatório aparecerá aqui ao preencher o formulário.
-                        </div>
-                    </div>
-
-                    <button id="submit-report" class="w-full py-3 mt-4 bg-blue-600 hover:bg-blue-700 rounded-lg font-bold text-white text-lg transition duration-200 shadow-lg shadow-blue-500/50" disabled onclick="window.submitReport()">
-                        Registrar Missão(ões) e Atualizar Ranking
-                    </button>
-                </section>
-            `;
-        }
-        
-        function renderRank() {
-            return `
-                <section class="space-y-4 pt-8">
-                    <h2 class="text-3xl font-bold text-red-400 text-center flex justify-center items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 8a1 1 0 000 2h6a1 1 0 100-2H7z" clip-rule="evenodd" /><path fill-rule="evenodd" d="M10 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zM5 10a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z" clip-rule="evenodd" /></svg>
-                        Rank dos Guardiões (Membros Cadastrados)
-                    </h2>
-                    <div class="bg-gray-800 p-4 rounded-xl shadow-xl overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-700">
-                            <thead class="bg-gray-700">
-                                <tr>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Rank</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">ID Guardião</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Total de Pontos</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Missões Concluídas</th>
-                                </tr>
-                            </thead>
-                            <tbody id="ninjas-scoreboard" class="bg-gray-800 divide-y divide-gray-700">
-                                <!-- Scoreboard data will be inserted here -->
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
-            `;
-        }
-
-        function renderRelatorios() {
-            return `
-                <section class="space-y-4 pt-8">
-                    <h2 class="text-3xl font-bold text-blue-400 text-center">Registro Completo de Relatórios</h2>
-                    <div class="bg-gray-800 p-4 rounded-xl shadow-xl overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-700">
-                            <thead class="bg-gray-700">
-                                <tr>
-                                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-1/12">ID Relatório</th>
-                                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-2/12">Serviços/Rank</th>
-                                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-2/12">Executor/Auxílio</th>
-                                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-2/12">Clientes</th>
-                                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-3/12">Descrição</th>
-                                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider w-1/12">Data</th>
-                                </tr>
-                            </thead>
-                            <tbody id="reports-log" class="bg-gray-800 divide-y divide-gray-700">
-                                <!-- Report data will be inserted here -->
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
-            `;
-        }
-
-        function renderAuxilio() {
-            return `
-                <section class="space-y-4 pt-8">
-                    <h2 class="text-3xl font-bold text-orange-400 text-center flex justify-center items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm4.5-9.5c0 .83-.67 1.5-1.5 1.5s-1.5-.67-1.5-1.5.67-1.5 1.5-1.5 1.5.67 1.5 1.5zM9 9c0-.83-.67-1.5-1.5-1.5S6 8.17 6 9s.67 1.5 1.5 1.5S9 9.83 9 9zm3 2.5c-2.33 0-4.38 1.15-5.69 2.84.03-.02.06-.04.09-.07C6.67 13.92 9.07 15 12 15s5.33-1.08 7.6-2.73c.03.03.06.05.09.07-1.31-1.69-3.36-2.84-5.69-2.84z"/></svg>
-                        Log de Auxílio (Potenciais Membros)
-                    </h2>
-                    <p class="text-center text-gray-400">Pessoas que participaram como auxílio e acumulam pontos separadamente.</p>
-                    <div class="bg-gray-800 p-4 rounded-xl shadow-xl overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-700">
-                            <thead class="bg-gray-700">
-                                <tr>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">ID Auxiliar</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Última Participação</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Pontos Acumulados</th>
-                                </tr>
-                            </thead>
-                            <tbody id="auxiliary-log" class="bg-gray-800 divide-y divide-gray-700">
-                                <!-- Auxiliary data will be inserted here -->
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
-            `;
-        }
-
-        function renderAdministracao() {
-             const accessStatus = isMasterAdminMode ? 
-                `<div class="text-center text-green-400 font-bold text-lg p-2">✅ MASTER ADMIN ATIVO</div>` : 
-                (isWriterMode ? `<div class="text-center text-yellow-400 font-bold text-lg p-2">✅ ESCRITOR DE RELATÓRIO ATIVO</div>` :
-                `<div class="text-center text-red-400 font-bold text-lg p-2">❌ ACESSO INATIVO</div>`);
-
-            return `
-                <!-- PAINEL DE AUTORIZAÇÃO (Login Customizado) -->
-                <section class="space-y-4 pt-4 pb-4 bg-gray-900 p-6 rounded-xl shadow-inner border border-blue-500/50">
-                     <h2 class="text-2xl font-bold text-blue-400 text-center flex justify-center items-center gap-2">
-                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2V7a5 5 0 00-5-5zm2 5v2h-4V7a3 3 0 016 0z"/></svg>
-                         Autorização de Escrita (ID & Senha Única)
-                     </h2>
-                     <p class="text-center text-gray-400">Insira seu ID e Senha fornecidos para liberar as funções de escrita e edição.</p>
-                     
-                     <div id="admin-status-display">${accessStatus}</div>
-
-                     <div class="flex flex-col md:flex-row gap-4 max-w-lg mx-auto">
-                         <input id="access-id-input" type="text" placeholder="Seu ID de Guardião/Admin" class="flex-grow p-2 rounded-lg bg-gray-700 border border-gray-600 text-white shadow-inner">
-                         <input id="access-key-input" type="password" placeholder="Sua Senha Única" class="flex-grow p-2 rounded-lg bg-gray-700 border border-gray-600 text-white shadow-inner">
-                         <button id="set-access-key-btn" class="w-full md:w-auto py-2 px-4 bg-blue-600 hover:bg-blue-700 rounded-lg font-bold text-white transition duration-200">
-                             Verificar Acesso
-                         </button>
-                     </div>
-                </section>
-                
-                <!-- 5. CADASTRO: GUARDIÕES (MASTER ADMIN ONLY) -->
-                <section class="space-y-4 pt-8 pb-16">
-                    <h2 class="text-3xl font-bold text-yellow-400 text-center">Cadastro: Guardiões (Membros da Organização)</h2>
-                    <p class="text-center text-gray-400">Pessoas que pontuam no Rank dos Guardiões. <span class="text-red-400">Master Admin Apenas.</span></p>
-
-                    <!-- Add New Ninja Form (ADMIN ONLY) -->
-                    <div id="add-ninja-form" class="bg-gray-700 p-4 rounded-lg shadow-inner flex flex-col sm:flex-row gap-4 admin-only ${isMasterAdminMode ? '' : 'hidden'}">
-                        <input id="new-ninja-id" type="text" placeholder="ID do Novo Guardião (Ex: Dellzito)" class="flex-grow p-2 rounded-lg bg-gray-800 border border-gray-600 text-white">
-                        <button id="add-ninja" class="w-full sm:w-auto py-2 px-4 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-bold text-white transition duration-200" onclick="window.addNinja()">Adicionar Guardião</button>
-                    </div>
-
-                    <div class="bg-gray-800 p-4 rounded-xl shadow-xl overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-700">
-                            <thead class="bg-gray-700">
-                                <tr>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">ID Guardião</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider admin-only ${isMasterAdminMode ? '' : 'hidden'}">Ação</th>
-                                </tr>
-                            </thead>
-                            <tbody id="ninjas-cadastro" class="bg-gray-800 divide-y divide-gray-700">
-                                <!-- Ninja data will be inserted here by renderNinjasTable() -->
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
-
-                <!-- 6. BANCO DE DADOS: MISSÕES E RANKS (MASTER ADMIN / WRITER MODE) -->
-                <section class="space-y-4 pt-8">
-                    <h2 class="text-3xl font-bold text-green-400 text-center">Gerenciamento de Missões (Quests)</h2>
-                    <p class="text-center text-gray-400">Adicione, edite ou exclua as quests disponíveis. <span class="${isWriterMode ? 'text-green-400' : 'text-red-400'}">Requer Autorização de Escrita.</span></p>
-                    
-                    <!-- Add New Mission Form (WRITER ONLY) -->
-                    <div id="add-mission-form" class="bg-gray-700 p-4 rounded-lg shadow-inner flex flex-col sm:flex-row gap-4 writer-only ${isWriterMode ? '' : 'hidden'}">
-                        <input id="new-mission-name" type="text" placeholder="Novo Nome da Missão" class="flex-grow p-2 rounded-lg bg-gray-800 border border-gray-600 text-white">
-                        <select id="new-mission-rank-select" class="w-full sm:w-32 p-2 rounded-lg bg-gray-800 border border-gray-600 text-white">
-                             <option value="S-Rank">S-Rank (5 Pts)</option>
-                             <option value="A-Rank">A-Rank (4 Pts)</option>
-                             <option value="B-Rank" selected>B-Rank (3 Pts)</option>
-                             <option value="C-Rank">C-Rank (2 Pts)</option>
-                             <option value="D-Rank">D-Rank (1 Pt)</option>
-                             <option value="Defesa/Raid">Defesa/Raid (10 Pts)</option>
-                             <option value="NPC Quest">NPC Quest (0 Pts)</option>
-                             <option value="Storyline">Storyline (0 Pts)</option>
-                        </select>
-                        <button id="add-mission" class="w-full sm:w-auto py-2 px-4 bg-green-600 hover:bg-green-700 rounded-lg font-bold text-white transition duration-200" onclick="window.addMission()">Adicionar Missão</button>
-                    </div>
-                    
-                    <div class="bg-gray-800 p-4 rounded-xl shadow-xl overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-700">
-                            <thead class="bg-gray-700">
-                                <tr>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Nome da Missão</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Rank Base</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Pontos</th>
-                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider writer-only ${isWriterMode ? '' : 'hidden'}">Ação</th>
-                                </tr>
-                            </thead>
-                            <tbody id="missions-database" class="bg-gray-800 divide-y divide-gray-700">
-                                <!-- Mission data will be inserted here by renderMissionsDatabase() -->
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
-            `;
-        }
-        
-        function renderHome() {
-            return `
-                <section class="text-center py-20 bg-gray-800 rounded-xl shadow-2xl space-y-8">
-                    <h2 class="text-3xl font-bold text-green-400">Bem-vindo(a) à Folha de Rosto Ninja!</h2>
-                    <p class="text-lg text-gray-300 max-w-2xl mx-auto">
-                        Este é o painel central para o sistema de rastreamento de missões e ranking dos Guardiões. 
-                        Todos os dados são sincronizados em tempo real via Firebase.
-                    </p>
-                    <div class="flex flex-col sm:flex-row justify-center gap-6 pt-4">
-                        <button onclick="window.renderPage('report_form')" class="py-3 px-8 bg-blue-600 hover:bg-blue-700 rounded-lg font-bold text-white text-xl transition duration-200 shadow-lg shadow-blue-500/50">
-                            Criar Novo Relatório
-                        </button>
-                        <button onclick="window.renderPage('scoreboard')" class="py-3 px-8 bg-red-600 hover:bg-red-700 rounded-lg font-bold text-white text-xl transition duration-200 shadow-lg shadow-red-500/50">
-                            Ver Rank
-                        </button>
-                        <button onclick="window.renderPage('admin_panel')" class="py-3 px-8 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-bold text-white text-xl transition duration-200 shadow-lg shadow-yellow-500/50">
-                            Autorização
-                        </button>
-                    </div>
-                </section>
-            `;
-        }
-
-        function renderCriarRelatorio() {
-            return `
-                <section id="report-form-section" class="bg-gray-800 p-6 rounded-xl shadow-2xl space-y-6">
-                    <h2 class="text-3xl font-semibold border-b pb-3 border-gray-700 text-blue-300 text-center">Formulário de Registro de Missão</h2>
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        
-                        <!-- ID Ninja (Quem Realizou) - AGORA COM SELECT -->
-                        <div class="space-y-2 lg:col-span-3">
-                            <label class="block text-sm font-medium text-gray-300">IDs Ninja (Quem Realizou - Membros Cadastrados)</label>
-                            
-                            <!-- Select e botão para adicionar -->
-                            <div class="flex gap-2">
-                                <select id="new-executor-id-select" class="flex-grow p-2.5 rounded-lg bg-gray-700 border border-gray-600 focus:ring-blue-500 focus:border-blue-500 text-white shadow-inner">
-                                    <option value="" disabled selected>Selecione um Guardião Ativo</option>
-                                    <!-- Options preenchidas dinamicamente por updateExecutorSelect -->
-                                </select>
-                                <button type="button" id="add-executor-btn" class="py-2.5 px-4 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition duration-200 font-semibold">
-                                    Adicionar Executor
-                                </button>
-                            </div>
-
-                            <!-- Tags de Executores Selecionados -->
-                            <div id="executors-tag-container" class="executor-list-container">
-                                <!-- Tags serão injetadas aqui -->
-                                <span id="no-executor-message" class="text-gray-400 text-sm italic">Nenhum executor selecionado.</span>
-                            </div>
-                        </div>
-                        
-                        <!-- ID Cliente (Requisitantes) -->
-                        <div class="space-y-2">
-                            <label for="clients" class="block text-sm font-medium text-gray-300">Clientes (Requisitantes, separados por vírgula)</label>
-                            <input id="clients" type="text" placeholder="lukfault, logagault" class="w-full p-2.5 rounded-lg bg-gray-700 border border-gray-600 focus:ring-blue-500 focus:border-blue-500 text-white shadow-inner" oninput="window.updateDescriptionPreview()">
-                        </div>
-
-                        <!-- Auxílio (Quem Ajudou - Rastreamento Separado) -->
-                        <div class="space-y-2">
-                            <label for="support-ids" class="block text-sm font-medium text-gray-300">Auxílio (IDs, separados por vírgula, Opcional)</label>
-                            <input id="support-ids" type="text" placeholder="AlnVctr, Yakuza" class="w-full p-2.5 rounded-lg bg-gray-700 border border-gray-600 focus:ring-blue-500 focus:border-blue-500 text-white shadow-inner" oninput="window.updateDescriptionPreview()">
-                        </div>
-                        
-                        <!-- Detalhes da Missão (Para a Descrição) -->
-                        <div class="space-y-2 lg:col-span-3">
-                            <label for="mission-details" class="block text-sm font-medium text-gray-300">Detalhes para a Descrição (Ex: "60 DNAs para o Arco do 30")</label>
-                            <input id="mission-details" type="text" placeholder="Descrição curta do objetivo da missão" class="w-full p-2.5 rounded-lg bg-gray-700 border border-gray-600 focus:ring-blue-500 focus:border-blue-500 text-white shadow-inner" oninput="window.updateDescriptionPreview()">
-                        </div>
-
-                        <!-- ID Relatório (Código de Registro) -->
-                        <div class="space-y-2 lg:col-span-3">
-                            <label for="report-id-display" class="block text-sm font-medium text-gray-300">ID Único do Relatório (Código de Registro)</label>
-                            <div class="flex gap-2">
-                                <input id="report-id-display" type="text" readonly class="w-full p-2.5 rounded-lg bg-gray-600/50 border border-gray-600 text-purple-300 font-mono shadow-inner cursor-not-allowed" value="Gerado Automaticamente">
-                                <button type="button" onclick="copyReportId()" class="p-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition duration-200" title="Copiar ID para o Discord">
+                                <button type="button" onclick="window.copyReportId()" class="p-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition duration-200" title="Copiar ID para o Discord">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M7 9a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1zm0 4a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1z" /><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a1 1 0 00-1 1v2a1 1 0 102 0V6a1 1 0 00-1-1zm2 13a1 1 0 001-1v-2a1 1 0 10-2 0v2a1 1 0 001 1z" clip-rule="evenodd" /></svg>
                                 </button>
                             </div>
@@ -1281,7 +894,7 @@
         }
 
         function renderReportsLog() {
-            renderReportsLogFiltered(null, 'reports-log');
+            window.renderReportsLogFiltered(null, 'reports-log');
         }
 
         // NOVO: Função para renderizar relatórios filtrados
@@ -1414,7 +1027,7 @@
             });
         }
 
-        function renderNinjasTable() {
+        window.renderNinjasTable = function() {
             const ninjasBody = document.getElementById('ninjas-cadastro');
             if (!ninjasBody) return; 
             
@@ -1460,7 +1073,7 @@
             }
         }
         
-        function renderMissionsDatabase() {
+        window.renderMissionsDatabase = function() {
             const missionsBody = document.getElementById('missions-database');
             if (!missionsBody) return; 
             
@@ -1507,9 +1120,649 @@
             });
         }
         
-        // ... (Funções Auxiliares e Lógica de Dados)
+        // --- Funções Auxiliares e Lógica de Dados ---
+        function cleanRankForLookup(rank) {
+            if (!rank) return '';
+            return rank.toUpperCase().replace(/[-\s\/]/g, '');
+        }
 
-        function renderNinjasTable() {
+        function normalizeId(id) {
+            if (!id) return '';
+            return id.trim().toLowerCase();
+        }
+        
+        window.addExecutorEntry = function() {
+            const select = document.getElementById('new-executor-id-select');
+            const id = select.value;
+            const statusElement = document.getElementById('status');
+
+            if (!id) {
+                statusElement.textContent = '⚠️ Por favor, selecione um ID de Guardião da lista.';
+                statusElement.className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
+                setTimeout(() => statusElement.classList.add('hidden'), 5000);
+                return;
+            }
+
+            if (selectedExecutors.includes(id)) {
+                 statusElement.textContent = `⚠️ ID "${id}" já está na lista de Executores.`;
+                 statusElement.className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
+                 setTimeout(() => statusElement.classList.add('hidden'), 5000);
+                 return;
+            }
+
+            selectedExecutors.push(id);
+            select.value = "";
+            statusElement.classList.add('hidden');
+            window.updateExecutorTags();
+        }
+
+        window.removeExecutorEntry = function(idToRemove) {
+            selectedExecutors = selectedExecutors.filter(id => id !== idToRemove);
+            window.updateExecutorTags();
+        }
+
+        window.updateExecutorTags = function(runPreview = true) {
+            const container = document.getElementById('executors-tag-container');
+            if (!container) return;
+
+            let contentHTML = '';
+            
+            if (selectedExecutors.length === 0) {
+                 contentHTML = '<span id="no-executor-message" class="text-gray-400 text-sm italic">Nenhum executor selecionado.</span>';
+                 
+            } else {
+                 selectedExecutors.forEach(id => {
+                    contentHTML += `<span class="executor-tag">${id} <span class="executor-remove-btn" onclick="window.removeExecutorEntry('${id}')">×</span></span>`;
+                 });
+            }
+            
+            container.innerHTML = contentHTML; 
+            window.updateExecutorSelect(); 
+            if (runPreview) window.updateDescriptionPreview();
+        }
+
+        window.updateExecutorSelect = function() {
+            const select = document.getElementById('new-executor-id-select');
+            if (!select) return;
+
+            select.innerHTML = '<option value="" disabled selected>Selecione um Guardião Ativo</option>';
+
+            const ninjas = Object.values(ninjasData).filter(n => n.isActive);
+            ninjas.forEach(ninja => {
+                if (!selectedExecutors.includes(ninja.id)) {
+                    const option = document.createElement('option');
+                    option.value = ninja.id;
+                    option.textContent = ninja.id;
+                    select.appendChild(option);
+                }
+            });
+        }
+        
+        window.updateMissionSelects = function(runPreview = true) {
+            const selects = document.querySelectorAll('.mission-select-dropdown');
+            if (selects.length === 0) return;
+            
+            const missionsArray = Object.values(missionsData);
+            
+            const orderedMissions = missionsArray.sort((a, b) => {
+                const rankA = cleanRankForLookup(a.baseRank);
+                const rankB = cleanRankForLookup(b.baseRank);
+                
+                const indexA = RANK_ORDER.findIndex(prefix => rankA.startsWith(prefix));
+                const indexB = RANK_ORDER.findIndex(prefix => rankB.startsWith(prefix));
+
+                if (indexA !== indexB) return indexA - indexB;
+                return a.name.localeCompare(b.name);
+            });
+
+            const missionOptions = orderedMissions
+                .map(m => `<option value="${m.name}" data-rank="${m.baseRank}" data-points="${m.points}">${m.name} (Rank ${m.baseRank.replace('-Rank', '')}, ${m.points} Pts)</option>`).join(''); 
+
+            selects.forEach(select => {
+                const currentValue = select.value;
+                select.innerHTML = `<option value="" disabled ${!currentValue ? 'selected' : ''}>Selecione a Missão</option>` + missionOptions;
+                if (currentValue) {
+                    select.value = currentValue;
+                }
+            });
+            if (runPreview) window.updateDescriptionPreview();
+        }
+
+        window.addMissionEntry = function(initialValue = '', runPreview = true) {
+            const container = document.getElementById('missions-entry-container');
+            if (!container) return;
+            
+            const newIndex = container.children.length;
+
+            const missionEntryHtml = `
+                <div class="flex gap-2 items-center mission-entry" data-index="${newIndex}">
+                    <select id="service-name-${newIndex}" class="mission-select-dropdown w-full p-2.5 rounded-lg bg-gray-700 border border-gray-600 focus:ring-blue-500 focus:border-blue-500 text-white shadow-inner" onchange="window.updateDescriptionPreview()">
+                        <!-- Options filled by updateMissionSelects -->
+                    </select>
+                    <button type="button" class="remove-btn bg-red-600 hover:bg-red-700 text-white p-2 rounded-lg transition duration-200" onclick="window.removeMissionEntry(this)">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 011 1v6a1 1 0 11-2 0V9a1 1 0 011-1zm5 0a1 1 0 011 1v6a1 1 0 11-2 0V9a1 1 0 011-1z" clip-rule="evenodd" /></svg>
+                    </button>
+                </div>
+            `;
+            container.insertAdjacentHTML('beforeend', missionEntryHtml);
+            
+            window.updateMissionSelects(runPreview);
+
+            if (initialValue) {
+                document.getElementById(`service-name-${newIndex}`).value = initialValue;
+            }
+            
+            const entries = container.querySelectorAll('.mission-entry');
+            if (entries.length === 1) {
+                entries[0].querySelector('.remove-btn').classList.add('hidden');
+            } else if (entries.length > 1) {
+                entries.forEach(entry => entry.querySelector('.remove-btn').classList.remove('hidden'));
+            }
+        }
+        
+        window.removeMissionEntry = function(button) {
+            const entry = button.closest('.mission-entry');
+            entry.remove();
+            window.updateDescriptionPreview();
+            
+            const container = document.getElementById('missions-entry-container');
+            if (container) {
+                const entries = container.querySelectorAll('.mission-entry');
+                if (entries.length === 1) {
+                    entries[0].querySelector('.remove-btn').classList.add('hidden');
+                }
+                if (entries.length === 0) {
+                    window.addMissionEntry();
+                }
+            }
+        }
+
+        window.generateReportId = function() {
+            currentReportId = Math.random().toString(36).substring(2, 10).toUpperCase();
+            const reportDisplay = document.getElementById('report-id-display');
+            if (reportDisplay) reportDisplay.value = currentReportId;
+        }
+        
+        window.copyReportId = function() {
+            const reportDisplay = document.getElementById('report-id-display');
+            if (!reportDisplay) return;
+
+            const text = reportDisplay.value;
+            const tempInput = document.createElement('input');
+            tempInput.value = text;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            
+            try {
+                document.execCommand('copy'); 
+                console.log('ID do Relatório copiado: ' + text);
+            } catch (err) {
+                console.error('Falha ao copiar ID para o clipboard:', err);
+            }
+            document.body.removeChild(tempInput);
+        }
+
+        function getRankColor(rank) {
+            const base = rank.toUpperCase().replace('-RANK', '').trim();
+            switch (base) {
+                case 'S': return 'text-purple-400';
+                case 'A': return 'text-red-400';
+                case 'B': return 'text-yellow-400';
+                case 'C': return 'text-green-400';
+                case 'D': return 'text-blue-400';
+                case 'DEFESA/RAID': return 'text-pink-400';
+                case 'NPC QUEST':
+                case 'STORYLINE':
+                default: return 'text-gray-400';
+            }
+        }
+
+        function getRankIcon(rank) {
+            switch (rank) {
+                case 1: return '<span class="text-yellow-500 text-xl">🥇</span>';
+                case 2: return '<span class="text-gray-400 text-xl">🥈</span>';
+                case 3: return '<span class="text-orange-600 text-xl">🥉</span>';
+                default: return `<span class="text-gray-500">${rank}°</span>`;
+            }
+        }
+
+        // --- Lógica de CRUD Firestore ---
+        window.addMission = async function() {
+            if (!isWriterMode) return;
+            // ... (Lógica de addMission)
+            const name = document.getElementById('new-mission-name').value.trim();
+            const rank = document.getElementById('new-mission-rank-select').value.trim();
+            const cleanRank = cleanRankForLookup(rank);
+            const points = RANK_POINTS[cleanRank] || 0;
+
+            if (!name || !rank || missionsData[name]) {
+                console.error('Nome, Rank e Missão não pode ser duplicada.');
+                return;
+            }
+
+            try {
+                const missionRef = doc(db, COLLECTIONS.MISSIONS, name); 
+                
+                await setDoc(missionRef, {
+                    name: name,
+                    baseRank: rank,
+                    points: points,
+                    id: name
+                });
+                document.getElementById('new-mission-name').value = '';
+                console.log(`Missão "${name}" (Rank ${rank}, ${points} Pts) adicionada com sucesso!`);
+            } catch (error) {
+                console.error("Erro ao adicionar missão:", error);
+            }
+        }
+        
+        window.editMission = async function(encodedId, encodedName, encodedRank) {
+            if (!isWriterMode) return; 
+            const docId = decodeURIComponent(encodedId); 
+            const currentName = decodeURIComponent(encodedName);
+            const currentRank = decodeURIComponent(encodedRank);
+
+            const result = await openCustomModal(
+                `Editar Missão: ${currentName}`,
+                'Altere o nome e o rank da missão abaixo.',
+                'input',
+                { name: currentName, rank: currentRank }
+            );
+
+            if (!result || result === false) return;
+            
+            const { name: finalName, rank: finalRank } = result;
+
+            try {
+                const cleanRank = cleanRankForLookup(finalRank);
+                const newPoints = RANK_POINTS[cleanRank] || 0;
+                const currentRef = doc(db, COLLECTIONS.MISSIONS, docId);
+                
+                if (finalName !== currentName) {
+                    const newRef = doc(db, COLLECTIONS.MISSIONS, finalName);
+                    
+                    const newSnap = await getDoc(newRef);
+                    if (newSnap.exists()) {
+                         console.error(`Erro: O novo nome da missão "${finalName}" já existe.`);
+                         return;
+                    }
+
+                    await setDoc(newRef, {
+                        name: finalName,
+                        baseRank: finalRank,
+                        points: newPoints,
+                        id: finalName 
+                    });
+                    await deleteDoc(currentRef); 
+                    console.log(`Missão ${currentName} movida/editada para ${finalName}.`);
+
+                } else {
+                    await updateDoc(currentRef, {
+                        baseRank: finalRank,
+                        points: newPoints
+                    });
+                    console.log(`Missão ${finalName} atualizada para Rank ${finalRank} (${newPoints} Pts).`);
+                }
+            } catch (error) {
+                console.error("Erro ao editar missão:", error);
+            }
+        }
+
+        window.deleteMission = async function(encodedId) {
+            if (!isWriterMode) return; 
+            const id = decodeURIComponent(encodedId); 
+
+            const shouldDelete = await openCustomModal(
+                'Confirmação de Exclusão',
+                `Tem certeza que deseja EXCLUIR a missão: "${id}"? Isso é irreversível.`,
+                'confirm'
+            );
+            
+            if (!shouldDelete) return;
+
+            try {
+                await deleteDoc(doc(db, COLLECTIONS.MISSIONS, id)); 
+                console.log(`Missão ${id} excluída.`);
+            } catch (error) {
+                console.error("Erro ao excluir missão:", error);
+            }
+        }
+        
+        window.addNinja = async function() {
+            if (!isMasterAdminMode) return; // Apenas Master Admin
+            const newNinjaIdInput = document.getElementById('new-ninja-id');
+            let ninjaId = newNinjaIdInput ? newNinjaIdInput.value.trim() : '';
+
+            if (!ninjaId) {
+                console.error('Por favor, digite o ID do Guardião.');
+                return; 
+            }
+            
+            const normalizedId = normalizeId(ninjaId); 
+
+            try {
+                const ninjaRef = doc(db, COLLECTIONS.NINJAS, normalizedId);
+                const ninjaSnap = await getDoc(ninjaRef);
+                const currentNinja = ninjaSnap.exists() ? ninjaSnap.data() : { rankPoints: 0, missionsCompleted: 0 };
+
+                await setDoc(ninjaRef, { 
+                    id: normalizedId, 
+                    isActive: true,
+                    rankPoints: currentNinja.rankPoints,
+                    missionsCompleted: currentNinja.missionsCompleted
+                }, { merge: true });
+                if (newNinjaIdInput) newNinjaIdInput.value = '';
+                console.log(`Guardião "${normalizedId}" adicionado/atualizado com sucesso!`);
+            } catch (error) {
+                console.error("Erro ao adicionar Guardião:", error);
+            }
+        }
+        
+        window.deleteNinja = async function(encodedId) {
+            if (!isMasterAdminMode) return; // Apenas Master Admin
+            const id = decodeURIComponent(encodedId); 
+            const normalizedId = normalizeId(id); 
+            
+            const shouldDelete = await openCustomModal(
+                'Confirmação de Exclusão de Guardião',
+                `Tem certeza que deseja EXCLUIR o Guardião **${normalizedId}**? Isso o REMOVE do cadastro e do ranking.`,
+                'confirm'
+            );
+            
+            if (!shouldDelete) return;
+
+            try {
+                await deleteDoc(doc(db, COLLECTIONS.NINJAS, normalizedId)); 
+                const auxRef = doc(db, COLLECTIONS.AUXILIARY_LOG, normalizedId); 
+                await deleteDoc(auxRef).catch(() => {}); 
+                console.log(`Guardião ${normalizedId} excluído.`);
+            } catch (error) {
+                console.error("Erro ao excluir Guardião:", error);
+            }
+        }
+        
+        window.editNinja = async function(encodedId) {
+            if (!isMasterAdminMode) return; // Apenas Master Admin
+            const id = decodeURIComponent(encodedId);
+            const normalizedId = normalizeId(id); 
+            const currentNinja = ninjasData[normalizedId];
+            
+            if (!currentNinja) return;
+            
+            const newStatus = await openCustomModal(
+                `Alternar Status do Guardião: ${normalizedId}`,
+                '', 
+                'ninjaEdit',
+                { id: normalizedId, isActive: currentNinja.isActive }
+            );
+
+            if (!newStatus) return;
+
+            try {
+                const newIsActive = !currentNinja.isActive;
+                await updateDoc(doc(db, COLLECTIONS.NINJAS, normalizedId), { 
+                    isActive: newIsActive
+                });
+                console.log(`Status do Guardião ${normalizedId} atualizado para ${newIsActive ? 'ATIVO' : 'INATIVO'}.`);
+            } catch (error) {
+                console.error("Erro ao editar Guardião:", error);
+            }
+        }
+
+        window.submitReport = async function() {
+            if (!isWriterMode) {
+                 document.getElementById('status').textContent = '⚠️ Erro: Você precisa de autorização de escrita para registrar relatórios.';
+                 document.getElementById('status').className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
+                 setTimeout(() => document.getElementById('status').classList.add('hidden'), 7000);
+                 return;
+            }
+            
+            const { totalPointsRaw, finalReportRank, serviceNames, executorIds, supportIds } = calculateTotalPointsAndRank();
+
+            if (executorIds.length === 0) {
+                 document.getElementById('status').textContent = '⚠️ Erro: Por favor, selecione pelo menos um ID Ninja Executor.';
+                 document.getElementById('status').className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
+                 setTimeout(() => document.getElementById('status').classList.add('hidden'), 7000);
+                 return;
+            }
+            
+            const clientsInput = document.getElementById('clients');
+            const missionDetailsInput = document.getElementById('mission-details');
+            
+            const clients = clientsInput ? clientsInput.value.split(',').map(c => c.trim()).filter(c => c) : [];
+            const missionDetails = missionDetailsInput ? missionDetailsInput.value.trim() : '';
+
+
+            if (serviceNames.length === 0 || clients.length === 0 || !missionDetails) {
+                document.getElementById('status').textContent = '⚠️ Erro: Por favor, selecione pelo menos uma missão e preencha todos os campos de cabeçalho (Clientes e Detalhes da Missão).';
+                document.getElementById('status').className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
+                setTimeout(() => document.getElementById('status').classList.add('hidden'), 7000);
+                return;
+            }
+            
+            const description = document.getElementById('description-preview').textContent;
+            const pointsToAward = totalPointsRaw; 
+
+            try {
+                const batch = writeBatch(db);
+
+                // 1. Registro do Relatório
+                const reportData = {
+                    reportId: currentReportId,
+                    serviceNames: serviceNames,
+                    finalReportRank: finalReportRank,
+                    clients: clients,
+                    executorIds: executorIds,
+                    supportIds: supportIds, 
+                    description: description,
+                    totalPointsRaw: totalPointsRaw,
+                    timestamp: new Date().toISOString()
+                };
+                batch.set(doc(db, COLLECTIONS.REPORTS, currentReportId), reportData);
+
+                // 2. Atualização dos Ninjas Executores: Cada um recebe a pontuação bruta total
+                for (const executorId of executorIds) {
+                    const ninjaRef = doc(db, COLLECTIONS.NINJAS, executorId); 
+                    let ninja = ninjasData[executorId] || { id: executorId, rankPoints: 0, missionsCompleted: 0, isActive: true };
+                    
+                    batch.set(ninjaRef, {
+                        rankPoints: (ninja.rankPoints || 0) + pointsToAward,
+                        missionsCompleted: (ninja.missionsCompleted || 0) + serviceNames.length, 
+                        id: executorId,
+                        isActive: true
+                    }, { merge: true });
+                }
+                
+                // 3. Atualização do Log de Auxílio: Cada um recebe a pontuação bruta total
+                const currentTime = new Date().toISOString();
+                for (const supportId of supportIds) {
+                    const auxRef = doc(db, COLLECTIONS.AUXILIARY_LOG, supportId); 
+                    let aux = auxiliaryData[supportId] || { id: supportId, rankPoints: 0, lastParticipation: currentTime };
+                    
+                    batch.set(auxRef, {
+                        rankPoints: (aux.rankPoints || 0) + pointsToAward,
+                        lastParticipation: currentTime,
+                        id: supportId 
+                    }, { merge: true });
+                }
+
+                await batch.commit();
+
+                // Limpeza de UI
+                selectedExecutors = [];
+                document.querySelectorAll('#report-form-section input[type="text"]').forEach(input => {
+                     if (input.id !== 'total-points' && input.id !== 'report-id-display') {
+                         input.value = '';
+                     }
+                });
+
+                document.getElementById('total-points').value = '0';
+                document.getElementById('description-preview').textContent = 'A descrição do relatório aparecerá aqui ao preencher o formulário.';
+                document.getElementById('submit-report').disabled = true;
+                
+                document.getElementById('missions-entry-container').innerHTML = '';
+                window.addMissionEntry(null, false);
+                window.generateReportId(); 
+
+                // Mensagem de sucesso
+                document.getElementById('status').textContent = `✅ Sucesso! Relatório "${currentReportId}" registrado. ${pointsToAward} pontos adicionados a cada participante.`;
+                document.getElementById('status').className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
+                setTimeout(() => document.getElementById('status').classList.add('hidden'), 7000);
+                
+            } catch (error) {
+                console.error("Erro fatal ao registrar no Firebase:", error);
+                 document.getElementById('status').textContent = `❌ Erro fatal ao registrar no Firebase: ${error.message}`;
+                 document.getElementById('status').className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                 setTimeout(() => document.getElementById('status').classList.add('hidden'), 7000);
+            }
+        }
+
+
+        window.updateDescriptionPreview = function() {
+            // VERIFICAÇÃO DE SEGURANÇA para elementos de input
+            const clientsInput = document.getElementById('clients');
+            const missionDetailsInput = document.getElementById('mission-details');
+            const descriptionPreview = document.getElementById('description-preview');
+            const submitButton = document.getElementById('submit-report');
+            const totalPointsInput = document.getElementById('total-points');
+            
+            if (!clientsInput || !missionDetailsInput || !descriptionPreview || !submitButton || !totalPointsInput) return;
+            
+            const clients = clientsInput.value.trim();
+            const missionDetails = missionDetailsInput.value.trim();
+            
+            const { totalPointsRaw, finalReportRank, serviceNames, executorIds, supportIds } = calculateTotalPointsAndRank();
+
+            totalPointsInput.value = totalPointsRaw;
+
+            // CORREÇÃO DE VALIDAÇÃO: Se o formulário estiver limpo (estado de reset/primeira carga), apenas reseta a descrição.
+            if (executorIds.length === 0 && totalPointsRaw === 0 && !clients && !missionDetails) {
+                 descriptionPreview.textContent = 'A descrição do relatório aparecerá aqui ao preencher o formulário.';
+                 submitButton.disabled = true;
+                 return;
+            }
+
+            let description = 'Aguardando informações...';
+            
+            // Variáveis de descrição inicializadas
+            const clientsList = clients.split(',').map(c => c.trim()).filter(c => c).join(', ');
+            const executorsText = executorIds.join(', ');
+            const supportText = supportIds.length > 0 ? ` com o auxílio de ${supportIds.join(', ')}` : '';
+            const servicesText = serviceNames.length > 1 ? serviceNames.join(', ') : serviceNames[0]; 
+            const pointsText = `(Total de ${totalPointsRaw} Pts). Rank Final: ${finalReportRank}.`;
+
+            
+            if (serviceNames.length > 0 && executorIds.length > 0 && clients && missionDetails) {
+                // Descrição Completa
+                description = `O(s) Guardião(ões) executor(es) ${executorsText}${supportText} atendeu(eram) à solicitação dos clientes ${clientsList} concluindo o(s) serviço(s): ${servicesText}. O objetivo primário era: "${missionDetails}". Pedido atendido com sucesso. ${pointsText} Relatório registrado e concluído.`;
+                submitButton.disabled = false;
+            } else {
+                // Descrição Incompleta / Guia de Erro
+                 description = `Faltando informações para completar o relatório: ${executorIds.length === 0 ? '[Falta Executor]' : ''} ${serviceNames.length === 0 ? '[Falta Missão]' : ''} ${!clients ? '[Falta Cliente]' : ''} ${!missionDetails ? '[Falta Detalhe]' : ''}`;
+                 submitButton.disabled = true;
+            }
+            
+            descriptionPreview.textContent = description;
+        }
+
+        function calculateTotalPointsAndRank() {
+            const selects = document.querySelectorAll('.mission-select-dropdown');
+            let totalPointsRaw = 0;
+            let highestRank = '';
+            const selectedMissionNames = [];
+
+            const getRankIndex = (rankClean) => {
+                return RANK_ORDER.findIndex(prefix => rankClean.startsWith(prefix));
+            };
+
+            selects.forEach(select => {
+                const missionName = select.value;
+                const mission = missionsData[missionName]; 
+                
+                if (mission) {
+                    totalPointsRaw += mission.points;
+                    selectedMissionNames.push(mission.name);
+                    
+                    const currentRankClean = cleanRankForLookup(mission.baseRank);
+                    const highestRankClean = cleanRankForLookup(highestRank); 
+
+                    const currentIndex = getRankIndex(currentRankClean);
+                    const highestIndex = getRankIndex(highestRankClean); 
+
+                    if (highestIndex === -1 || currentIndex < highestIndex) {
+                        highestRank = mission.baseRank;
+                    }
+                }
+            });
+            
+            const executorIds = selectedExecutors;
+            const supportIds = document.getElementById('support-ids') ? 
+                document.getElementById('support-ids').value.split(',').map(id => normalizeId(id)).filter(id => id) : [];
+            
+            if (highestRank === '') {
+                highestRank = 'N/A';
+            }
+            
+            return { 
+                totalPointsRaw: totalPointsRaw, 
+                finalReportRank: highestRank, 
+                serviceNames: selectedMissionNames,
+                executorIds: executorIds,
+                supportIds: supportIds
+            };
+        }
+
+
+        // --- Funções de Renderização de Tabela de Dados (Chamadas pelo Roteador) ---
+        
+        window.renderScoreboard = function() {
+            const scoreboardBody = document.getElementById('ninjas-scoreboard');
+            if (!scoreboardBody) return; 
+            
+            const guardians = Object.values(ninjasData).filter(n => n.isActive); 
+            guardians.sort((a, b) => b.rankPoints - a.rankPoints);
+            
+            scoreboardBody.innerHTML = '';
+
+            guardians.forEach((ninja, index) => {
+                const rankIcon = getRankIcon(index + 1);
+                scoreboardBody.innerHTML += `
+                    <tr class="hover:bg-gray-700/50">
+                        <td class="px-6 py-2 whitespace-nowrap text-sm font-bold text-center">${rankIcon}</td>
+                        <td class="px-6 py-2 whitespace-nowrap text-sm font-medium text-blue-300">${ninja.id}</td>
+                        <td class="px-6 py-2 whitespace-nowrap text-sm font-bold text-green-400">${Math.round(ninja.rankPoints)} Pts</td>
+                        <td class="px-6 py-2 whitespace-nowrap text-sm text-gray-300">${ninja.missionsCompleted || 0}</td>
+                    </tr>
+                `;
+            });
+        }
+        
+        window.renderAuxilio = function() {
+            const auxiliaryLogBody = document.getElementById('auxiliary-log');
+            if (!auxiliaryLogBody) return;
+            
+            const sortedAuxiliaries = Object.values(auxiliaryData).sort((a, b) => b.rankPoints - a.rankPoints);
+            
+            auxiliaryLogBody.innerHTML = '';
+            
+            sortedAuxiliaries.forEach(data => {
+                const lastParticipation = data.lastParticipation ? new Date(data.lastParticipation).toLocaleDateString('pt-BR') : 'N/A';
+                
+                auxiliaryLogBody.innerHTML += `
+                    <tr class="hover:bg-gray-700/50">
+                        <td class="px-6 py-2 whitespace-nowrap text-sm font-medium text-orange-300">${data.id}</td>
+                        <td class="px-6 py-2 whitespace-nowrap text-sm text-gray-400">${lastParticipation}</td>
+                        <td class="px-6 py-2 whitespace-nowrap text-sm font-semibold text-green-400">${Math.round(data.rankPoints || 0)} Pts</td>
+                    </tr>
+                `;
+            });
+        }
+        
+        window.renderReportsLog = function() {
+            window.renderReportsLogFiltered(null, 'reports-log');
+        }
+
+        window.renderNinjasTable = function() {
             const ninjasBody = document.getElementById('ninjas-cadastro');
             if (!ninjasBody) return; 
             
@@ -1553,6 +1806,53 @@
                     document.getElementById('add-ninja-form').classList.add('hidden');
                 }
             }
+        }
+        
+        window.renderMissionsDatabase = function() {
+            const missionsBody = document.getElementById('missions-database');
+            if (!missionsBody) return; 
+            
+            missionsBody.innerHTML = '';
+            
+            const showActionColumn = isWriterMode; // Ação de Quests liberada para Escritor/Admin
+            const sortedMissions = Object.values(missionsData).sort((a, b) => a.name.localeCompare(b.name));
+
+            const actionHeader = missionsBody.closest('table').querySelector('th.writer-only');
+            if (actionHeader) {
+                if (showActionColumn) actionHeader.classList.remove('hidden');
+                else actionHeader.classList.add('hidden');
+            }
+            
+            if (document.getElementById('add-mission-form')) {
+                if (isWriterMode) {
+                    document.getElementById('add-mission-form').classList.remove('hidden');
+                } else {
+                    document.getElementById('add-mission-form').classList.add('hidden');
+                }
+            }
+
+
+            sortedMissions.forEach(data => {
+                const encodedId = encodeURIComponent(data.id);
+                const encodedName = encodeURIComponent(data.name);
+                const encodedRank = encodeURIComponent(data.baseRank);
+                
+                const actionCell = showActionColumn ? `
+                    <td class="px-6 py-2 whitespace-nowrap text-right text-sm font-medium flex gap-2">
+                        <button onclick="window.editMission('${encodedId}', '${encodedName}', '${encodedRank}')" class="text-blue-500 hover:text-blue-700 transition duration-150 edit-btn">Editar</button>
+                        <button onclick="window.deleteMission('${encodedId}')" class="text-red-500 hover:text-red-700 transition duration-150 remove-btn">Excluir</button>
+                    </td>
+                ` : '';
+
+                missionsBody.innerHTML += `
+                    <tr class="hover:bg-gray-700/50">
+                        <td class="px-6 py-2 whitespace-nowrap text-sm font-medium text-white">${data.name}</td>
+                        <td class="px-6 py-2 whitespace-nowrap text-sm text-yellow-400 font-semibold">${data.baseRank.replace('-Rank', '')}</td>
+                        <td class="px-6 py-2 whitespace-nowrap text-sm text-green-400">${data.points}</td>
+                        ${actionCell}
+                    </tr>
+                `;
+            });
         }
 
         // --- Inicialização ---
