@@ -297,17 +297,28 @@
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, doc, setDoc, onSnapshot, collection, writeBatch, 
-            updateDoc, getDoc, deleteDoc, setLogLevel, query, enableIndexedDbPersistence,
-            collectionGroup
+            updateDoc, getDoc, deleteDoc, setLogLevel
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // ====================================================================
         // CONFIGURAÇÕES DO FIREBASE & CHAVE MESTRA
         // ====================================================================
         
-        // Variáveis globais fornecidas pelo ambiente Canvas (devem ser usadas)
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : null) || { projectId: appId };
+        // VARIÁVEIS DE CONFIGURAÇÃO DO FIREBASE (SUA CHAVE)
+        const CUSTOM_FIREBASE_CONFIG = {
+            apiKey: "AIzaSyC-QaPr7O6RkWR3vpXCg4zrnUWw3TzU9ss",
+            authDomain: "g-2cb53.firebaseapp.com",
+            projectId: "g-2cb53",
+            storageBucket: "g-2cb53.firebasestorage.app",
+            messagingSenderId: "292095146978",
+            appId: "1:292095146978:web:836d833230907d081017bb",
+            measurementId: "G-B2EXQ2Z75D"
+        };
+        // FIM DA CONFIGURAÇÃO MANUAL
+        
+        // Determina a configuração a ser usada (priorizando o ambiente, senão usa a customizada)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : CUSTOM_FIREBASE_CONFIG.projectId || 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : CUSTOM_FIREBASE_CONFIG;
         
         // Chave Admin fixa para este projeto (sempre 'devkey2024')
         const ADMIN_KEY = 'devkey2024'; 
@@ -331,7 +342,7 @@
         };
 
         // Cache de dados
-        let missionsData = {}; // Mapeado por doc.id
+        let missionsData = {}; // Mapeado por nome da missão
         let ninjasData = {}; // Mapeado por ninjaId
         let auxiliaryData = {}; // Mapeado por auxiliaryId
 
@@ -377,7 +388,8 @@
          * Função utilitária para gerar ID limpo para Firestore Doc ID de Missões.
          */
         function generateMissionDocId(name) {
-            return name.trim().replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
+            // Usamos o nome da missão como Doc ID, pois é único e facilita a busca
+            return name.trim();
         }
 
         // --- Funções de Controle de Acesso e UI ---
@@ -394,7 +406,6 @@
                 }
             });
             
-            // Re-renderiza as tabelas de cadastro e missões para exibir/ocultar a coluna "Ação"
             setupFirestoreListeners(); 
         }
 
@@ -453,7 +464,6 @@
                 errorSpan.classList.add('hidden');
                 inputContainer.classList.add('hidden');
                 input1.value = '';
-                // Garante que o input 2 seja um select antes de modificar o innerHTML
                 const selectRank = document.getElementById('modal-input-2');
                 selectRank.innerHTML = ''; 
                 input1.type = 'text'; 
@@ -527,25 +537,26 @@
         // --- Funções de Inicialização e Autenticação (Firestore) ---
         async function initializeFirebase() {
             try {
-                // Tenta usar a configuração injetada, senão usa uma configuração local mínima
+                // Tenta inicializar com a configuração, se for válida
+                if (!firebaseConfig || !firebaseConfig.projectId) {
+                    throw new Error("Configuração do Firebase inválida ou faltando. Por favor, verifique CUSTOM_FIREBASE_CONFIG.");
+                }
+                
+                // GARANTE QUE O LOGIN ANÔNIMO ESTEJA ATIVO NO CONSOLE DO FIREBASE
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
                 
-                // Desabilita a persistência de indexedDB para evitar erros de "offline" no ambiente iFrame
-                // enableIndexedDbPersistence(db).catch(err => {
-                //     console.warn("Falha ao habilitar persistência local (IndexedDB). Ignorando para estabilidade.", err);
-                // });
-
-
                 // Tenta login anônimo para ter um UID e respeitar as regras de segurança
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         userId = user.uid;
                     } else {
+                        // Tenta login anônimo
                         const anonUser = await signInAnonymously(auth);
                         userId = anonUser.user.uid;
                     }
+                    
                     authReady = true;
                     document.getElementById('auth-info').textContent = `Usuário ID (Anon): ${userId} | App ID (DB Contexto): ${appId}`;
                     setupFirestoreListeners();
@@ -556,8 +567,10 @@
 
             } catch (error) {
                 console.error("Erro na inicialização do Firebase:", error);
-                document.getElementById('status').className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
-                document.getElementById('status').textContent = `Erro ao conectar: ${error.message}. Verifique o console para detalhes.`;
+                // Exibe a mensagem de erro que você estava vendo, mas agora com a solução
+                const statusElement = document.getElementById('status');
+                statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                statusElement.textContent = `❌ Erro ao conectar: ${error.message}. Verifique o console. Por favor, garanta que o **Login Anônimo** esteja **ATIVADO** no seu Firebase Console.`;
             }
         }
 
@@ -582,8 +595,9 @@
 
                 snapshot.forEach(doc => {
                     const data = doc.data();
+                    // Usamos o nome da missão (que é o Doc ID) como chave de cache
                     data.id = doc.id; 
-                    missionsData[data.name] = data; // Mapeado por nome para facilitar o lookup no formulário
+                    missionsData[data.name] = data; 
                     
                     const encodedId = encodeURIComponent(data.id);
                     const encodedName = encodeURIComponent(data.name);
@@ -608,7 +622,7 @@
                 
                 updateMissionSelects();
 
-                if (snapshot.empty && !isAdminMode) {
+                if (Object.keys(missionsData).length === 0) { // Verifica se não há nenhuma missão
                     seedInitialData();
                 }
             });
@@ -741,7 +755,7 @@
             });
         }
         
-        // --- Funções Auxiliares e de CRUD (Proteções de Admin Adicionadas) ---
+        // --- Funções Auxiliares e de CRUD ---
 
         function generateProofId() {
             currentProofId = Math.random().toString(36).substring(2, 10).toUpperCase();
@@ -889,7 +903,7 @@
 
             selects.forEach(select => {
                 const missionName = select.value;
-                // CORREÇÃO DE PONTOS: Busca a missão diretamente no cache 'missionsData' pelo nome
+                // Busca a missão diretamente no cache 'missionsData' pelo nome (chave de cache)
                 const mission = missionsData[missionName]; 
                 
                 if (mission) {
@@ -974,7 +988,7 @@
 
             for (const mission of newMissionsList) {
                 const docId = generateMissionDocId(mission.name);
-                const missionRef = doc(db, COLLECTIONS.MISSIONS, mission.name); // Usa o nome como ID
+                const missionRef = doc(db, COLLECTIONS.MISSIONS, docId); // Usa o nome como ID do documento
                 const cleanRank = cleanRankForLookup(mission.rank);
                 const points = RANK_POINTS[cleanRank] || 0; 
                 batch.set(missionRef, {
