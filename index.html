@@ -7,7 +7,7 @@
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Inter Font -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght400;600;700&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #0f172a; }
         ::-webkit-scrollbar { width: 8px; }
@@ -62,7 +62,8 @@
         
         <!-- HEADER e NAVEGAÇÃO -->
         <header class="pb-4 border-b border-blue-700/50">
-            <h1 class="text-4xl font-bold text-blue-400 text-center mb-4">📜 Sistema de Registro de Missões Ninja</h1>
+            <!-- ALTERAÇÃO 1: Título principal do sistema -->
+            <h1 id="main-title" class="text-4xl font-bold text-blue-400 text-center mb-4">📜 Sistema de Registro de Missões — 12 Guardiões da Folha</h1>
             <!-- Reorganização dos links de navegação -->
             <nav class="flex justify-center bg-gray-900 rounded-xl shadow-lg p-1">
                 <a class="nav-link" onclick="window.renderPage('home')" id="nav-home">Home</a>
@@ -1653,22 +1654,28 @@
 
         // --- TEMPLATES ---
         window.renderHome = function() { return `
+                <!-- ALTERAÇÃO 2: Conteúdo simplificado da Home -->
                 <section class="text-center py-20 bg-gray-800 rounded-xl shadow-2xl space-y-8">
-                    <h2 class="text-3xl font-bold text-green-400">Bem-vindo(a) à Folha de Rosto Ninja!</h2>
-                    <p class="text-lg text-gray-300 max-w-2xl mx-auto">
-                        Este é o painel central para o sistema de rastreamento de missões e ranking dos Guardiões. 
-                        Todos os dados são sincronizados em tempo real via Firebase.
-                    </p>
-                    <div class="flex flex-col sm:flex-row justify-center gap-6 pt-4">
-                        <button onclick="window.renderPage('report_form')" class="py-3 px-8 bg-blue-600 hover:bg-blue-700 rounded-lg font-bold text-white text-xl transition duration-200 shadow-lg shadow-blue-500/50">
-                            Criar Novo Relatório
-                        </button>
-                        <button onclick="window.renderPage('scoreboard')" class="py-3 px-8 bg-red-600 hover:bg-red-700 rounded-lg font-bold text-white text-xl transition duration-200 shadow-lg shadow-red-500/50">
-                            Ver Rank
-                        </button>
-                        <button onclick="window.renderPage('admin_panel')" class="py-3 px-8 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-bold text-white text-xl transition duration-200 shadow-lg shadow-yellow-500/50">
-                            Autorização
-                        </button>
+                    <h2 class="text-3xl font-bold text-green-400">Bem-vindo(a), Guardião.</h2>
+                    
+                    <div class="max-w-3xl mx-auto space-y-4 text-center p-4">
+                        <p class="text-lg text-gray-300">
+                            Você acaba de acessar o Painel Central da organização, o núcleo onde todas as missões são documentadas, avaliadas e sincronizadas entre os membros dos 12.
+                        </p>
+                        
+                        <p class="text-xl text-yellow-400 font-medium pt-4">
+                            Aqui, cada relatório conta. Cada missão registrada fortalece nossa vila.
+                        </p>
+
+                        <h3 class="text-lg font-bold text-blue-400 pt-6">Use o menu acima para:</h3>
+                        <ul class="text-lg text-gray-200 space-y-2 list-none p-0 max-w-sm mx-auto">
+                            <li class="flex justify-center items-center gap-2"><span class="text-xl text-red-500">⚔️</span> Criar novos relatórios de missão</li>
+                            <li class="flex justify-center items-center gap-2"><span class="text-xl text-yellow-500">🏆</span> Ver o rank dos Guardiões da Folha</li>
+                            <li class="flex justify-center items-center gap-2"><span class="text-xl text-blue-500">📚</span> Acompanhar o histórico completo</li>
+                            <li class="flex justify-center items-center gap-2"><span class="text-xl text-orange-500">🤝</span> Conferir registros de auxílio</li>
+                            <li class="flex justify-center items-center gap-2"><span class="text-xl text-green-500">🛡️</span> Gerenciar os membros da guilda</li>
+                            <li class="flex justify-center items-center gap-2"><span class="text-xl text-purple-500">🔐</span> Acessar comandos autorizados</li>
+                        </ul>
                     </div>
                 </section>
             `; }
@@ -1952,4 +1959,3 @@
     </script>
 </body>
 </html>
-
