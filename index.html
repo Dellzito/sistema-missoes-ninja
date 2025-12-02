@@ -254,7 +254,7 @@
                 auxiliaryData = {};
                 snapshot.forEach(doc => {
                     const data = doc.data();
-                    auxiliaryData[data.id] = data;
+                    auxiliaryData[doc.id] = data;
                 });
                 if (['auxiliary_log', 'ninja_panel'].includes(currentPage)) window.renderPage(currentPage);
             });
@@ -451,10 +451,10 @@
 
             switch (pageName) {
                 case 'home':
-                    contentDiv.innerHTML = renderHome();
+                    contentDiv.innerHTML = window.renderHome();
                     break;
                 case 'report_form':
-                    contentDiv.innerHTML = renderCriarRelatorio();
+                    contentDiv.innerHTML = window.renderCriarRelatorio();
                     if (!isWriterMode) {
                         contentDiv.innerHTML += '<p class="text-center text-red-500 pt-8">Você precisa de autorização (Login na aba Autorização) para criar relatórios.</p>';
                         break;
@@ -468,31 +468,31 @@
                     window.updateDescriptionPreview();
                     break;
                 case 'scoreboard':
-                    contentDiv.innerHTML = renderRank();
-                    renderScoreboard();
+                    contentDiv.innerHTML = window.renderRank();
+                    window.renderScoreboard();
                     break;
                 case 'reports_log':
-                    contentDiv.innerHTML = renderRelatorios();
-                    renderReportsLog();
+                    contentDiv.innerHTML = window.renderRelatorios();
+                    window.renderReportsLog();
                     break;
                 case 'auxiliary_log':
-                    contentDiv.innerHTML = renderAuxilio();
-                    renderAuxilio();
+                    contentDiv.innerHTML = window.renderAuxilio();
+                    window.renderAuxilio();
                     break;
                 case 'admin_panel':
-                    contentDiv.innerHTML = renderAutorizacao(); // Novo nome da aba
+                    contentDiv.innerHTML = window.renderAutorizacao(); // CORREÇÃO: Adicionado window.
                     break;
                 case 'ninja_panel':
-                    contentDiv.innerHTML = renderNinjaPanel();
+                    contentDiv.innerHTML = window.renderNinjaPanel();
                     window.renderReportsLogFiltered();
                     break;
                 default:
-                    contentDiv.innerHTML = renderHome();
+                    contentDiv.innerHTML = window.renderHome();
             }
         }
 
         // --- TEMPLATES ---
-        function renderHome() { /* ... */ return `
+        window.renderHome = function() { return `
                 <section class="text-center py-20 bg-gray-800 rounded-xl shadow-2xl space-y-8">
                     <h2 class="text-3xl font-bold text-green-400">Bem-vindo(a) à Folha de Rosto Ninja!</h2>
                     <p class="text-lg text-gray-300 max-w-2xl mx-auto">
@@ -513,7 +513,7 @@
                 </section>
             `; }
 
-        function renderCriarRelatorio() { return `
+        window.renderCriarRelatorio = function() { return `
                 <section id="report-form-section" class="bg-gray-800 p-6 rounded-xl shadow-2xl space-y-6">
                     <h2 class="text-3xl font-semibold border-b pb-3 border-gray-700 text-blue-300 text-center">Formulário de Registro de Missão</h2>
 
@@ -610,7 +610,7 @@
             `;
         }
         
-        function renderRank() {
+        window.renderRank = function() {
             return `
                 <section class="space-y-4 pt-8">
                     <h2 class="text-3xl font-bold text-red-400 text-center flex justify-center items-center gap-2">
@@ -636,7 +636,7 @@
             `;
         }
 
-        function renderRelatorios() {
+        window.renderRelatorios = function() {
             return `
                 <section class="space-y-4 pt-8">
                     <h2 class="text-3xl font-bold text-blue-400 text-center">Registro Completo de Relatórios</h2>
@@ -661,7 +661,7 @@
             `;
         }
 
-        function renderAuxilio() {
+        window.renderAuxilio = function() {
             return `
                 <section class="space-y-4 pt-8">
                     <h2 class="text-3xl font-bold text-orange-400 text-center flex justify-center items-center gap-2">
@@ -687,10 +687,10 @@
             `;
         }
 
-        function renderAdministracao() {
+        window.renderAutorizacao = function() {
              const accessStatus = isMasterAdminMode ? 
                 `<div class="text-center text-green-400 font-bold text-lg p-2">✅ MASTER ADMIN ATIVO</div>` : 
-                (isWriterMode ? `<div class="text-center text-yellow-400 font-bold text-lg p-2">✅ ESCRITOR DE RELATÓRIO ATIVO</div>` :
+                (isWriterMode ? `<div class="text-yellow-400 font-bold text-lg p-2">✅ ESCRITOR DE RELATÓRIO ATIVO</div>` :
                 `<div class="text-center text-red-400 font-bold text-lg p-2">❌ ACESSO INATIVO</div>`);
 
             return `
@@ -780,7 +780,7 @@
             `;
         }
         
-        function renderNinjaPanel() {
+        window.renderNinjaPanel = function() {
             // Combina IDs de Guardiões Ativos/Inativos e IDs de Auxílio em uma única lista
             const allIdsMap = {};
             
@@ -850,7 +850,7 @@
             `;
         }
 
-        function renderScoreboard() {
+        window.renderScoreboard = function() {
             const scoreboardBody = document.getElementById('ninjas-scoreboard');
             if (!scoreboardBody) return; 
             
@@ -872,7 +872,7 @@
             });
         }
         
-        function renderAuxilio() {
+        window.renderAuxilio = function() {
             const auxiliaryLogBody = document.getElementById('auxiliary-log');
             if (!auxiliaryLogBody) return;
             
@@ -893,11 +893,103 @@
             });
         }
 
-        function renderReportsLog() {
+        window.renderReportsLog = function() {
             window.renderReportsLogFiltered(null, 'reports-log');
         }
 
-        // NOVO: Função para renderizar relatórios filtrados
+        window.renderNinjasTable = function() {
+            const ninjasBody = document.getElementById('ninjas-cadastro');
+            if (!ninjasBody) return; 
+            
+            const showActionColumn = isMasterAdminMode;
+
+            const actionHeader = ninjasBody.closest('table').querySelector('th.admin-only');
+            if (actionHeader) {
+                if (showActionColumn) actionHeader.classList.remove('hidden');
+                else actionHeader.classList.add('hidden');
+            }
+
+            const sortedNinjas = Object.values(ninjasData).sort((a, b) => a.id.localeCompare(b.id));
+            
+            ninjasBody.innerHTML = '';
+
+            sortedNinjas.forEach(data => {
+                
+                const statusClass = data.isActive ? 'text-green-400' : 'text-red-400';
+                const statusText = data.isActive ? 'Ativo' : 'Inativo';
+                
+                const actionCell = showActionColumn ? `
+                    <td class="px-6 py-2 whitespace-nowrap text-right text-sm font-medium">
+                        <button onclick="window.editNinja('${data.id}')" class="text-blue-500 hover:text-blue-700 transition duration-150 edit-btn mr-2">Editar Status</button>
+                        <button onclick="window.deleteNinja('${data.id}')" class="text-red-500 hover:text-red-700 transition duration-150">Excluir</button>
+                    </td>
+                ` : '';
+
+                ninjasBody.innerHTML += `
+                    <tr class="hover:bg-gray-700/50">
+                        <td class="px-6 py-2 whitespace-nowrap text-sm font-medium text-white">${data.id}</td>
+                        <td class="px-6 py-2 whitespace-nowrap text-sm ${statusClass}">${statusText}</td>
+                        ${actionCell}
+                    </tr>
+                `;
+            });
+            
+            if (document.getElementById('add-ninja-form')) {
+                if (isMasterAdminMode) {
+                    document.getElementById('add-ninja-form').classList.remove('hidden');
+                } else {
+                    document.getElementById('add-ninja-form').classList.add('hidden');
+                }
+            }
+        }
+        
+        window.renderMissionsDatabase = function() {
+            const missionsBody = document.getElementById('missions-database');
+            if (!missionsBody) return; 
+            
+            missionsBody.innerHTML = '';
+            
+            const showActionColumn = isWriterMode; // Ação de Quests liberada para Escritor/Admin
+            const sortedMissions = Object.values(missionsData).sort((a, b) => a.name.localeCompare(b.name));
+
+            const actionHeader = missionsBody.closest('table').querySelector('th.writer-only');
+            if (actionHeader) {
+                if (showActionColumn) actionHeader.classList.remove('hidden');
+                else actionHeader.classList.add('hidden');
+            }
+            
+            if (document.getElementById('add-mission-form')) {
+                if (isWriterMode) {
+                    document.getElementById('add-mission-form').classList.remove('hidden');
+                } else {
+                    document.getElementById('add-mission-form').classList.add('hidden');
+                }
+            }
+
+
+            sortedMissions.forEach(data => {
+                const encodedId = encodeURIComponent(data.id);
+                const encodedName = encodeURIComponent(data.name);
+                const encodedRank = encodeURIComponent(data.baseRank);
+                
+                const actionCell = showActionColumn ? `
+                    <td class="px-6 py-2 whitespace-nowrap text-right text-sm font-medium flex gap-2">
+                        <button onclick="window.editMission('${encodedId}', '${encodedName}', '${encodedRank}')" class="text-blue-500 hover:text-blue-700 transition duration-150 edit-btn">Editar</button>
+                        <button onclick="window.deleteMission('${encodedId}')" class="text-red-500 hover:text-red-700 transition duration-150 remove-btn">Excluir</button>
+                    </td>
+                ` : '';
+
+                missionsBody.innerHTML += `
+                    <tr class="hover:bg-gray-700/50">
+                        <td class="px-6 py-2 whitespace-nowrap text-sm font-medium text-white">${data.name}</td>
+                        <td class="px-6 py-2 whitespace-nowrap text-sm text-yellow-400 font-semibold">${data.baseRank.replace('-Rank', '')}</td>
+                        <td class="px-6 py-2 whitespace-nowrap text-sm text-green-400">${data.points}</td>
+                        ${actionCell}
+                    </tr>
+                `;
+            });
+        }
+
         window.renderReportsLogFiltered = function(filterId = null, targetId = 'filtered-reports-log') {
             
             const reportsLog = document.getElementById(targetId);
@@ -1026,865 +1118,3 @@
                 }
             });
         }
-
-        window.renderNinjasTable = function() {
-            const ninjasBody = document.getElementById('ninjas-cadastro');
-            if (!ninjasBody) return; 
-            
-            const showActionColumn = isMasterAdminMode;
-
-            const actionHeader = ninjasBody.closest('table').querySelector('th.admin-only');
-            if (actionHeader) {
-                if (showActionColumn) actionHeader.classList.remove('hidden');
-                else actionHeader.classList.add('hidden');
-            }
-
-            const sortedNinjas = Object.values(ninjasData).sort((a, b) => a.id.localeCompare(b.id));
-            
-            ninjasBody.innerHTML = '';
-
-            sortedNinjas.forEach(data => {
-                
-                const statusClass = data.isActive ? 'text-green-400' : 'text-red-400';
-                const statusText = data.isActive ? 'Ativo' : 'Inativo';
-                
-                const actionCell = showActionColumn ? `
-                    <td class="px-6 py-2 whitespace-nowrap text-right text-sm font-medium">
-                        <button onclick="window.editNinja('${data.id}')" class="text-blue-500 hover:text-blue-700 transition duration-150 edit-btn mr-2">Editar Status</button>
-                        <button onclick="window.deleteNinja('${data.id}')" class="text-red-500 hover:text-red-700 transition duration-150">Excluir</button>
-                    </td>
-                ` : '';
-
-                ninjasBody.innerHTML += `
-                    <tr class="hover:bg-gray-700/50">
-                        <td class="px-6 py-2 whitespace-nowrap text-sm font-medium text-white">${data.id}</td>
-                        <td class="px-6 py-2 whitespace-nowrap text-sm ${statusClass}">${statusText}</td>
-                        ${actionCell}
-                    </tr>
-                `;
-            });
-            
-            if (document.getElementById('add-ninja-form')) {
-                if (isMasterAdminMode) {
-                    document.getElementById('add-ninja-form').classList.remove('hidden');
-                } else {
-                    document.getElementById('add-ninja-form').classList.add('hidden');
-                }
-            }
-        }
-        
-        window.renderMissionsDatabase = function() {
-            const missionsBody = document.getElementById('missions-database');
-            if (!missionsBody) return; 
-            
-            missionsBody.innerHTML = '';
-            
-            const showActionColumn = isWriterMode; // Ação de Quests liberada para Escritor/Admin
-            const sortedMissions = Object.values(missionsData).sort((a, b) => a.name.localeCompare(b.name));
-
-            const actionHeader = missionsBody.closest('table').querySelector('th.writer-only');
-            if (actionHeader) {
-                if (showActionColumn) actionHeader.classList.remove('hidden');
-                else actionHeader.classList.add('hidden');
-            }
-            
-            if (document.getElementById('add-mission-form')) {
-                if (isWriterMode) {
-                    document.getElementById('add-mission-form').classList.remove('hidden');
-                } else {
-                    document.getElementById('add-mission-form').classList.add('hidden');
-                }
-            }
-
-
-            sortedMissions.forEach(data => {
-                const encodedId = encodeURIComponent(data.id);
-                const encodedName = encodeURIComponent(data.name);
-                const encodedRank = encodeURIComponent(data.baseRank);
-                
-                const actionCell = showActionColumn ? `
-                    <td class="px-6 py-2 whitespace-nowrap text-right text-sm font-medium flex gap-2">
-                        <button onclick="window.editMission('${encodedId}', '${encodedName}', '${encodedRank}')" class="text-blue-500 hover:text-blue-700 transition duration-150 edit-btn">Editar</button>
-                        <button onclick="window.deleteMission('${encodedId}')" class="text-red-500 hover:text-red-700 transition duration-150 remove-btn">Excluir</button>
-                    </td>
-                ` : '';
-
-                missionsBody.innerHTML += `
-                    <tr class="hover:bg-gray-700/50">
-                        <td class="px-6 py-2 whitespace-nowrap text-sm font-medium text-white">${data.name}</td>
-                        <td class="px-6 py-2 whitespace-nowrap text-sm text-yellow-400 font-semibold">${data.baseRank.replace('-Rank', '')}</td>
-                        <td class="px-6 py-2 whitespace-nowrap text-sm text-green-400">${data.points}</td>
-                        ${actionCell}
-                    </tr>
-                `;
-            });
-        }
-        
-        // --- Funções Auxiliares e Lógica de Dados ---
-        function cleanRankForLookup(rank) {
-            if (!rank) return '';
-            return rank.toUpperCase().replace(/[-\s\/]/g, '');
-        }
-
-        function normalizeId(id) {
-            if (!id) return '';
-            return id.trim().toLowerCase();
-        }
-        
-        window.addExecutorEntry = function() {
-            const select = document.getElementById('new-executor-id-select');
-            const id = select.value;
-            const statusElement = document.getElementById('status');
-
-            if (!id) {
-                statusElement.textContent = '⚠️ Por favor, selecione um ID de Guardião da lista.';
-                statusElement.className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
-                setTimeout(() => statusElement.classList.add('hidden'), 5000);
-                return;
-            }
-
-            if (selectedExecutors.includes(id)) {
-                 statusElement.textContent = `⚠️ ID "${id}" já está na lista de Executores.`;
-                 statusElement.className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
-                 setTimeout(() => statusElement.classList.add('hidden'), 5000);
-                 return;
-            }
-
-            selectedExecutors.push(id);
-            select.value = "";
-            statusElement.classList.add('hidden');
-            window.updateExecutorTags();
-        }
-
-        window.removeExecutorEntry = function(idToRemove) {
-            selectedExecutors = selectedExecutors.filter(id => id !== idToRemove);
-            window.updateExecutorTags();
-        }
-
-        window.updateExecutorTags = function(runPreview = true) {
-            const container = document.getElementById('executors-tag-container');
-            if (!container) return;
-
-            let contentHTML = '';
-            
-            if (selectedExecutors.length === 0) {
-                 contentHTML = '<span id="no-executor-message" class="text-gray-400 text-sm italic">Nenhum executor selecionado.</span>';
-                 
-            } else {
-                 selectedExecutors.forEach(id => {
-                    contentHTML += `<span class="executor-tag">${id} <span class="executor-remove-btn" onclick="window.removeExecutorEntry('${id}')">×</span></span>`;
-                 });
-            }
-            
-            container.innerHTML = contentHTML; 
-            window.updateExecutorSelect(); 
-            if (runPreview) window.updateDescriptionPreview();
-        }
-
-        window.updateExecutorSelect = function() {
-            const select = document.getElementById('new-executor-id-select');
-            if (!select) return;
-
-            select.innerHTML = '<option value="" disabled selected>Selecione um Guardião Ativo</option>';
-
-            const ninjas = Object.values(ninjasData).filter(n => n.isActive);
-            ninjas.forEach(ninja => {
-                if (!selectedExecutors.includes(ninja.id)) {
-                    const option = document.createElement('option');
-                    option.value = ninja.id;
-                    option.textContent = ninja.id;
-                    select.appendChild(option);
-                }
-            });
-        }
-        
-        window.updateMissionSelects = function(runPreview = true) {
-            const selects = document.querySelectorAll('.mission-select-dropdown');
-            if (selects.length === 0) return;
-            
-            const missionsArray = Object.values(missionsData);
-            
-            const orderedMissions = missionsArray.sort((a, b) => {
-                const rankA = cleanRankForLookup(a.baseRank);
-                const rankB = cleanRankForLookup(b.baseRank);
-                
-                const indexA = RANK_ORDER.findIndex(prefix => rankA.startsWith(prefix));
-                const indexB = RANK_ORDER.findIndex(prefix => rankB.startsWith(prefix));
-
-                if (indexA !== indexB) return indexA - indexB;
-                return a.name.localeCompare(b.name);
-            });
-
-            const missionOptions = orderedMissions
-                .map(m => `<option value="${m.name}" data-rank="${m.baseRank}" data-points="${m.points}">${m.name} (Rank ${m.baseRank.replace('-Rank', '')}, ${m.points} Pts)</option>`).join(''); 
-
-            selects.forEach(select => {
-                const currentValue = select.value;
-                select.innerHTML = `<option value="" disabled ${!currentValue ? 'selected' : ''}>Selecione a Missão</option>` + missionOptions;
-                if (currentValue) {
-                    select.value = currentValue;
-                }
-            });
-            if (runPreview) window.updateDescriptionPreview();
-        }
-
-        window.addMissionEntry = function(initialValue = '', runPreview = true) {
-            const container = document.getElementById('missions-entry-container');
-            if (!container) return;
-            
-            const newIndex = container.children.length;
-
-            const missionEntryHtml = `
-                <div class="flex gap-2 items-center mission-entry" data-index="${newIndex}">
-                    <select id="service-name-${newIndex}" class="mission-select-dropdown w-full p-2.5 rounded-lg bg-gray-700 border border-gray-600 focus:ring-blue-500 focus:border-blue-500 text-white shadow-inner" onchange="window.updateDescriptionPreview()">
-                        <!-- Options filled by updateMissionSelects -->
-                    </select>
-                    <button type="button" class="remove-btn bg-red-600 hover:bg-red-700 text-white p-2 rounded-lg transition duration-200" onclick="window.removeMissionEntry(this)">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 011 1v6a1 1 0 11-2 0V9a1 1 0 011-1zm5 0a1 1 0 011 1v6a1 1 0 11-2 0V9a1 1 0 011-1z" clip-rule="evenodd" /></svg>
-                    </button>
-                </div>
-            `;
-            container.insertAdjacentHTML('beforeend', missionEntryHtml);
-            
-            window.updateMissionSelects(runPreview);
-
-            if (initialValue) {
-                document.getElementById(`service-name-${newIndex}`).value = initialValue;
-            }
-            
-            const entries = container.querySelectorAll('.mission-entry');
-            if (entries.length === 1) {
-                entries[0].querySelector('.remove-btn').classList.add('hidden');
-            } else if (entries.length > 1) {
-                entries.forEach(entry => entry.querySelector('.remove-btn').classList.remove('hidden'));
-            }
-        }
-        
-        window.removeMissionEntry = function(button) {
-            const entry = button.closest('.mission-entry');
-            entry.remove();
-            window.updateDescriptionPreview();
-            
-            const container = document.getElementById('missions-entry-container');
-            if (container) {
-                const entries = container.querySelectorAll('.mission-entry');
-                if (entries.length === 1) {
-                    entries[0].querySelector('.remove-btn').classList.add('hidden');
-                }
-                if (entries.length === 0) {
-                    window.addMissionEntry();
-                }
-            }
-        }
-
-        window.generateReportId = function() {
-            currentReportId = Math.random().toString(36).substring(2, 10).toUpperCase();
-            const reportDisplay = document.getElementById('report-id-display');
-            if (reportDisplay) reportDisplay.value = currentReportId;
-        }
-        
-        window.copyReportId = function() {
-            const reportDisplay = document.getElementById('report-id-display');
-            if (!reportDisplay) return;
-
-            const text = reportDisplay.value;
-            const tempInput = document.createElement('input');
-            tempInput.value = text;
-            document.body.appendChild(tempInput);
-            tempInput.select();
-            
-            try {
-                document.execCommand('copy'); 
-                console.log('ID do Relatório copiado: ' + text);
-            } catch (err) {
-                console.error('Falha ao copiar ID para o clipboard:', err);
-            }
-            document.body.removeChild(tempInput);
-        }
-
-        function getRankColor(rank) {
-            const base = rank.toUpperCase().replace('-RANK', '').trim();
-            switch (base) {
-                case 'S': return 'text-purple-400';
-                case 'A': return 'text-red-400';
-                case 'B': return 'text-yellow-400';
-                case 'C': return 'text-green-400';
-                case 'D': return 'text-blue-400';
-                case 'DEFESA/RAID': return 'text-pink-400';
-                case 'NPC QUEST':
-                case 'STORYLINE':
-                default: return 'text-gray-400';
-            }
-        }
-
-        function getRankIcon(rank) {
-            switch (rank) {
-                case 1: return '<span class="text-yellow-500 text-xl">🥇</span>';
-                case 2: return '<span class="text-gray-400 text-xl">🥈</span>';
-                case 3: return '<span class="text-orange-600 text-xl">🥉</span>';
-                default: return `<span class="text-gray-500">${rank}°</span>`;
-            }
-        }
-
-        // --- Lógica de CRUD Firestore ---
-        window.addMission = async function() {
-            if (!isWriterMode) return;
-            // ... (Lógica de addMission)
-            const name = document.getElementById('new-mission-name').value.trim();
-            const rank = document.getElementById('new-mission-rank-select').value.trim();
-            const cleanRank = cleanRankForLookup(rank);
-            const points = RANK_POINTS[cleanRank] || 0;
-
-            if (!name || !rank || missionsData[name]) {
-                console.error('Nome, Rank e Missão não pode ser duplicada.');
-                return;
-            }
-
-            try {
-                const missionRef = doc(db, COLLECTIONS.MISSIONS, name); 
-                
-                await setDoc(missionRef, {
-                    name: name,
-                    baseRank: rank,
-                    points: points,
-                    id: name
-                });
-                document.getElementById('new-mission-name').value = '';
-                console.log(`Missão "${name}" (Rank ${rank}, ${points} Pts) adicionada com sucesso!`);
-            } catch (error) {
-                console.error("Erro ao adicionar missão:", error);
-            }
-        }
-        
-        window.editMission = async function(encodedId, encodedName, encodedRank) {
-            if (!isWriterMode) return; 
-            const docId = decodeURIComponent(encodedId); 
-            const currentName = decodeURIComponent(encodedName);
-            const currentRank = decodeURIComponent(encodedRank);
-
-            const result = await openCustomModal(
-                `Editar Missão: ${currentName}`,
-                'Altere o nome e o rank da missão abaixo.',
-                'input',
-                { name: currentName, rank: currentRank }
-            );
-
-            if (!result || result === false) return;
-            
-            const { name: finalName, rank: finalRank } = result;
-
-            try {
-                const cleanRank = cleanRankForLookup(finalRank);
-                const newPoints = RANK_POINTS[cleanRank] || 0;
-                const currentRef = doc(db, COLLECTIONS.MISSIONS, docId);
-                
-                if (finalName !== currentName) {
-                    const newRef = doc(db, COLLECTIONS.MISSIONS, finalName);
-                    
-                    const newSnap = await getDoc(newRef);
-                    if (newSnap.exists()) {
-                         console.error(`Erro: O novo nome da missão "${finalName}" já existe.`);
-                         return;
-                    }
-
-                    await setDoc(newRef, {
-                        name: finalName,
-                        baseRank: finalRank,
-                        points: newPoints,
-                        id: finalName 
-                    });
-                    await deleteDoc(currentRef); 
-                    console.log(`Missão ${currentName} movida/editada para ${finalName}.`);
-
-                } else {
-                    await updateDoc(currentRef, {
-                        baseRank: finalRank,
-                        points: newPoints
-                    });
-                    console.log(`Missão ${finalName} atualizada para Rank ${finalRank} (${newPoints} Pts).`);
-                }
-            } catch (error) {
-                console.error("Erro ao editar missão:", error);
-            }
-        }
-
-        window.deleteMission = async function(encodedId) {
-            if (!isWriterMode) return; 
-            const id = decodeURIComponent(encodedId); 
-
-            const shouldDelete = await openCustomModal(
-                'Confirmação de Exclusão',
-                `Tem certeza que deseja EXCLUIR a missão: "${id}"? Isso é irreversível.`,
-                'confirm'
-            );
-            
-            if (!shouldDelete) return;
-
-            try {
-                await deleteDoc(doc(db, COLLECTIONS.MISSIONS, id)); 
-                console.log(`Missão ${id} excluída.`);
-            } catch (error) {
-                console.error("Erro ao excluir missão:", error);
-            }
-        }
-        
-        window.addNinja = async function() {
-            if (!isMasterAdminMode) return; // Apenas Master Admin
-            const newNinjaIdInput = document.getElementById('new-ninja-id');
-            let ninjaId = newNinjaIdInput ? newNinjaIdInput.value.trim() : '';
-
-            if (!ninjaId) {
-                console.error('Por favor, digite o ID do Guardião.');
-                return; 
-            }
-            
-            const normalizedId = normalizeId(ninjaId); 
-
-            try {
-                const ninjaRef = doc(db, COLLECTIONS.NINJAS, normalizedId);
-                const ninjaSnap = await getDoc(ninjaRef);
-                const currentNinja = ninjaSnap.exists() ? ninjaSnap.data() : { rankPoints: 0, missionsCompleted: 0 };
-
-                await setDoc(ninjaRef, { 
-                    id: normalizedId, 
-                    isActive: true,
-                    rankPoints: currentNinja.rankPoints,
-                    missionsCompleted: currentNinja.missionsCompleted
-                }, { merge: true });
-                if (newNinjaIdInput) newNinjaIdInput.value = '';
-                console.log(`Guardião "${normalizedId}" adicionado/atualizado com sucesso!`);
-            } catch (error) {
-                console.error("Erro ao adicionar Guardião:", error);
-            }
-        }
-        
-        window.deleteNinja = async function(encodedId) {
-            if (!isMasterAdminMode) return; // Apenas Master Admin
-            const id = decodeURIComponent(encodedId); 
-            const normalizedId = normalizeId(id); 
-            
-            const shouldDelete = await openCustomModal(
-                'Confirmação de Exclusão de Guardião',
-                `Tem certeza que deseja EXCLUIR o Guardião **${normalizedId}**? Isso o REMOVE do cadastro e do ranking.`,
-                'confirm'
-            );
-            
-            if (!shouldDelete) return;
-
-            try {
-                await deleteDoc(doc(db, COLLECTIONS.NINJAS, normalizedId)); 
-                const auxRef = doc(db, COLLECTIONS.AUXILIARY_LOG, normalizedId); 
-                await deleteDoc(auxRef).catch(() => {}); 
-                console.log(`Guardião ${normalizedId} excluído.`);
-            } catch (error) {
-                console.error("Erro ao excluir Guardião:", error);
-            }
-        }
-        
-        window.editNinja = async function(encodedId) {
-            if (!isMasterAdminMode) return; // Apenas Master Admin
-            const id = decodeURIComponent(encodedId);
-            const normalizedId = normalizeId(id); 
-            const currentNinja = ninjasData[normalizedId];
-            
-            if (!currentNinja) return;
-            
-            const newStatus = await openCustomModal(
-                `Alternar Status do Guardião: ${normalizedId}`,
-                '', 
-                'ninjaEdit',
-                { id: normalizedId, isActive: currentNinja.isActive }
-            );
-
-            if (!newStatus) return;
-
-            try {
-                const newIsActive = !currentNinja.isActive;
-                await updateDoc(doc(db, COLLECTIONS.NINJAS, normalizedId), { 
-                    isActive: newIsActive
-                });
-                console.log(`Status do Guardião ${normalizedId} atualizado para ${newIsActive ? 'ATIVO' : 'INATIVO'}.`);
-            } catch (error) {
-                console.error("Erro ao editar Guardião:", error);
-            }
-        }
-
-        window.submitReport = async function() {
-            if (!isWriterMode) {
-                 document.getElementById('status').textContent = '⚠️ Erro: Você precisa de autorização de escrita para registrar relatórios.';
-                 document.getElementById('status').className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
-                 setTimeout(() => document.getElementById('status').classList.add('hidden'), 7000);
-                 return;
-            }
-            
-            const { totalPointsRaw, finalReportRank, serviceNames, executorIds, supportIds } = calculateTotalPointsAndRank();
-
-            if (executorIds.length === 0) {
-                 document.getElementById('status').textContent = '⚠️ Erro: Por favor, selecione pelo menos um ID Ninja Executor.';
-                 document.getElementById('status').className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
-                 setTimeout(() => document.getElementById('status').classList.add('hidden'), 7000);
-                 return;
-            }
-            
-            const clientsInput = document.getElementById('clients');
-            const missionDetailsInput = document.getElementById('mission-details');
-            
-            const clients = clientsInput ? clientsInput.value.split(',').map(c => c.trim()).filter(c => c) : [];
-            const missionDetails = missionDetailsInput ? missionDetailsInput.value.trim() : '';
-
-
-            if (serviceNames.length === 0 || clients.length === 0 || !missionDetails) {
-                document.getElementById('status').textContent = '⚠️ Erro: Por favor, selecione pelo menos uma missão e preencha todos os campos de cabeçalho (Clientes e Detalhes da Missão).';
-                document.getElementById('status').className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
-                setTimeout(() => document.getElementById('status').classList.add('hidden'), 7000);
-                return;
-            }
-            
-            const description = document.getElementById('description-preview').textContent;
-            const pointsToAward = totalPointsRaw; 
-
-            try {
-                const batch = writeBatch(db);
-
-                // 1. Registro do Relatório
-                const reportData = {
-                    reportId: currentReportId,
-                    serviceNames: serviceNames,
-                    finalReportRank: finalReportRank,
-                    clients: clients,
-                    executorIds: executorIds,
-                    supportIds: supportIds, 
-                    description: description,
-                    totalPointsRaw: totalPointsRaw,
-                    timestamp: new Date().toISOString()
-                };
-                batch.set(doc(db, COLLECTIONS.REPORTS, currentReportId), reportData);
-
-                // 2. Atualização dos Ninjas Executores: Cada um recebe a pontuação bruta total
-                for (const executorId of executorIds) {
-                    const ninjaRef = doc(db, COLLECTIONS.NINJAS, executorId); 
-                    let ninja = ninjasData[executorId] || { id: executorId, rankPoints: 0, missionsCompleted: 0, isActive: true };
-                    
-                    batch.set(ninjaRef, {
-                        rankPoints: (ninja.rankPoints || 0) + pointsToAward,
-                        missionsCompleted: (ninja.missionsCompleted || 0) + serviceNames.length, 
-                        id: executorId,
-                        isActive: true
-                    }, { merge: true });
-                }
-                
-                // 3. Atualização do Log de Auxílio: Cada um recebe a pontuação bruta total
-                const currentTime = new Date().toISOString();
-                for (const supportId of supportIds) {
-                    const auxRef = doc(db, COLLECTIONS.AUXILIARY_LOG, supportId); 
-                    let aux = auxiliaryData[supportId] || { id: supportId, rankPoints: 0, lastParticipation: currentTime };
-                    
-                    batch.set(auxRef, {
-                        rankPoints: (aux.rankPoints || 0) + pointsToAward,
-                        lastParticipation: currentTime,
-                        id: supportId 
-                    }, { merge: true });
-                }
-
-                await batch.commit();
-
-                // Limpeza de UI
-                selectedExecutors = [];
-                document.querySelectorAll('#report-form-section input[type="text"]').forEach(input => {
-                     if (input.id !== 'total-points' && input.id !== 'report-id-display') {
-                         input.value = '';
-                     }
-                });
-
-                document.getElementById('total-points').value = '0';
-                document.getElementById('description-preview').textContent = 'A descrição do relatório aparecerá aqui ao preencher o formulário.';
-                document.getElementById('submit-report').disabled = true;
-                
-                document.getElementById('missions-entry-container').innerHTML = '';
-                window.addMissionEntry(null, false);
-                window.generateReportId(); 
-
-                // Mensagem de sucesso
-                document.getElementById('status').textContent = `✅ Sucesso! Relatório "${currentReportId}" registrado. ${pointsToAward} pontos adicionados a cada participante.`;
-                document.getElementById('status').className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
-                setTimeout(() => document.getElementById('status').classList.add('hidden'), 7000);
-                
-            } catch (error) {
-                console.error("Erro fatal ao registrar no Firebase:", error);
-                 document.getElementById('status').textContent = `❌ Erro fatal ao registrar no Firebase: ${error.message}`;
-                 document.getElementById('status').className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
-                 setTimeout(() => document.getElementById('status').classList.add('hidden'), 7000);
-            }
-        }
-
-
-        window.updateDescriptionPreview = function() {
-            // VERIFICAÇÃO DE SEGURANÇA para elementos de input
-            const clientsInput = document.getElementById('clients');
-            const missionDetailsInput = document.getElementById('mission-details');
-            const descriptionPreview = document.getElementById('description-preview');
-            const submitButton = document.getElementById('submit-report');
-            const totalPointsInput = document.getElementById('total-points');
-            
-            if (!clientsInput || !missionDetailsInput || !descriptionPreview || !submitButton || !totalPointsInput) return;
-            
-            const clients = clientsInput.value.trim();
-            const missionDetails = missionDetailsInput.value.trim();
-            
-            const { totalPointsRaw, finalReportRank, serviceNames, executorIds, supportIds } = calculateTotalPointsAndRank();
-
-            totalPointsInput.value = totalPointsRaw;
-
-            // CORREÇÃO DE VALIDAÇÃO: Se o formulário estiver limpo (estado de reset/primeira carga), apenas reseta a descrição.
-            if (executorIds.length === 0 && totalPointsRaw === 0 && !clients && !missionDetails) {
-                 descriptionPreview.textContent = 'A descrição do relatório aparecerá aqui ao preencher o formulário.';
-                 submitButton.disabled = true;
-                 return;
-            }
-
-            let description = 'Aguardando informações...';
-            
-            // Variáveis de descrição inicializadas
-            const clientsList = clients.split(',').map(c => c.trim()).filter(c => c).join(', ');
-            const executorsText = executorIds.join(', ');
-            const supportText = supportIds.length > 0 ? ` com o auxílio de ${supportIds.join(', ')}` : '';
-            const servicesText = serviceNames.length > 1 ? serviceNames.join(', ') : serviceNames[0]; 
-            const pointsText = `(Total de ${totalPointsRaw} Pts). Rank Final: ${finalReportRank}.`;
-
-            
-            if (serviceNames.length > 0 && executorIds.length > 0 && clients && missionDetails) {
-                // Descrição Completa
-                description = `O(s) Guardião(ões) executor(es) ${executorsText}${supportText} atendeu(eram) à solicitação dos clientes ${clientsList} concluindo o(s) serviço(s): ${servicesText}. O objetivo primário era: "${missionDetails}". Pedido atendido com sucesso. ${pointsText} Relatório registrado e concluído.`;
-                submitButton.disabled = false;
-            } else {
-                // Descrição Incompleta / Guia de Erro
-                 description = `Faltando informações para completar o relatório: ${executorIds.length === 0 ? '[Falta Executor]' : ''} ${serviceNames.length === 0 ? '[Falta Missão]' : ''} ${!clients ? '[Falta Cliente]' : ''} ${!missionDetails ? '[Falta Detalhe]' : ''}`;
-                 submitButton.disabled = true;
-            }
-            
-            descriptionPreview.textContent = description;
-        }
-
-        function calculateTotalPointsAndRank() {
-            const selects = document.querySelectorAll('.mission-select-dropdown');
-            let totalPointsRaw = 0;
-            let highestRank = '';
-            const selectedMissionNames = [];
-
-            const getRankIndex = (rankClean) => {
-                return RANK_ORDER.findIndex(prefix => rankClean.startsWith(prefix));
-            };
-
-            selects.forEach(select => {
-                const missionName = select.value;
-                const mission = missionsData[missionName]; 
-                
-                if (mission) {
-                    totalPointsRaw += mission.points;
-                    selectedMissionNames.push(mission.name);
-                    
-                    const currentRankClean = cleanRankForLookup(mission.baseRank);
-                    const highestRankClean = cleanRankForLookup(highestRank); 
-
-                    const currentIndex = getRankIndex(currentRankClean);
-                    const highestIndex = getRankIndex(highestRankClean); 
-
-                    if (highestIndex === -1 || currentIndex < highestIndex) {
-                        highestRank = mission.baseRank;
-                    }
-                }
-            });
-            
-            const executorIds = selectedExecutors;
-            const supportIds = document.getElementById('support-ids') ? 
-                document.getElementById('support-ids').value.split(',').map(id => normalizeId(id)).filter(id => id) : [];
-            
-            if (highestRank === '') {
-                highestRank = 'N/A';
-            }
-            
-            return { 
-                totalPointsRaw: totalPointsRaw, 
-                finalReportRank: highestRank, 
-                serviceNames: selectedMissionNames,
-                executorIds: executorIds,
-                supportIds: supportIds
-            };
-        }
-
-
-        // --- Funções de Renderização de Tabela de Dados (Chamadas pelo Roteador) ---
-        
-        window.renderScoreboard = function() {
-            const scoreboardBody = document.getElementById('ninjas-scoreboard');
-            if (!scoreboardBody) return; 
-            
-            const guardians = Object.values(ninjasData).filter(n => n.isActive); 
-            guardians.sort((a, b) => b.rankPoints - a.rankPoints);
-            
-            scoreboardBody.innerHTML = '';
-
-            guardians.forEach((ninja, index) => {
-                const rankIcon = getRankIcon(index + 1);
-                scoreboardBody.innerHTML += `
-                    <tr class="hover:bg-gray-700/50">
-                        <td class="px-6 py-2 whitespace-nowrap text-sm font-bold text-center">${rankIcon}</td>
-                        <td class="px-6 py-2 whitespace-nowrap text-sm font-medium text-blue-300">${ninja.id}</td>
-                        <td class="px-6 py-2 whitespace-nowrap text-sm font-bold text-green-400">${Math.round(ninja.rankPoints)} Pts</td>
-                        <td class="px-6 py-2 whitespace-nowrap text-sm text-gray-300">${ninja.missionsCompleted || 0}</td>
-                    </tr>
-                `;
-            });
-        }
-        
-        window.renderAuxilio = function() {
-            const auxiliaryLogBody = document.getElementById('auxiliary-log');
-            if (!auxiliaryLogBody) return;
-            
-            const sortedAuxiliaries = Object.values(auxiliaryData).sort((a, b) => b.rankPoints - a.rankPoints);
-            
-            auxiliaryLogBody.innerHTML = '';
-            
-            sortedAuxiliaries.forEach(data => {
-                const lastParticipation = data.lastParticipation ? new Date(data.lastParticipation).toLocaleDateString('pt-BR') : 'N/A';
-                
-                auxiliaryLogBody.innerHTML += `
-                    <tr class="hover:bg-gray-700/50">
-                        <td class="px-6 py-2 whitespace-nowrap text-sm font-medium text-orange-300">${data.id}</td>
-                        <td class="px-6 py-2 whitespace-nowrap text-sm text-gray-400">${lastParticipation}</td>
-                        <td class="px-6 py-2 whitespace-nowrap text-sm font-semibold text-green-400">${Math.round(data.rankPoints || 0)} Pts</td>
-                    </tr>
-                `;
-            });
-        }
-        
-        window.renderReportsLog = function() {
-            window.renderReportsLogFiltered(null, 'reports-log');
-        }
-
-        window.renderNinjasTable = function() {
-            const ninjasBody = document.getElementById('ninjas-cadastro');
-            if (!ninjasBody) return; 
-            
-            const showActionColumn = isMasterAdminMode;
-
-            const actionHeader = ninjasBody.closest('table').querySelector('th.admin-only');
-            if (actionHeader) {
-                if (showActionColumn) actionHeader.classList.remove('hidden');
-                else actionHeader.classList.add('hidden');
-            }
-
-            const sortedNinjas = Object.values(ninjasData).sort((a, b) => a.id.localeCompare(b.id));
-            
-            ninjasBody.innerHTML = '';
-
-            sortedNinjas.forEach(data => {
-                
-                const statusClass = data.isActive ? 'text-green-400' : 'text-red-400';
-                const statusText = data.isActive ? 'Ativo' : 'Inativo';
-                
-                const actionCell = showActionColumn ? `
-                    <td class="px-6 py-2 whitespace-nowrap text-right text-sm font-medium">
-                        <button onclick="window.editNinja('${data.id}')" class="text-blue-500 hover:text-blue-700 transition duration-150 edit-btn mr-2">Editar Status</button>
-                        <button onclick="window.deleteNinja('${data.id}')" class="text-red-500 hover:text-red-700 transition duration-150">Excluir</button>
-                    </td>
-                ` : '';
-
-                ninjasBody.innerHTML += `
-                    <tr class="hover:bg-gray-700/50">
-                        <td class="px-6 py-2 whitespace-nowrap text-sm font-medium text-white">${data.id}</td>
-                        <td class="px-6 py-2 whitespace-nowrap text-sm ${statusClass}">${statusText}</td>
-                        ${actionCell}
-                    </tr>
-                `;
-            });
-            
-            if (document.getElementById('add-ninja-form')) {
-                if (isMasterAdminMode) {
-                    document.getElementById('add-ninja-form').classList.remove('hidden');
-                } else {
-                    document.getElementById('add-ninja-form').classList.add('hidden');
-                }
-            }
-        }
-        
-        window.renderMissionsDatabase = function() {
-            const missionsBody = document.getElementById('missions-database');
-            if (!missionsBody) return; 
-            
-            missionsBody.innerHTML = '';
-            
-            const showActionColumn = isWriterMode; // Ação de Quests liberada para Escritor/Admin
-            const sortedMissions = Object.values(missionsData).sort((a, b) => a.name.localeCompare(b.name));
-
-            const actionHeader = missionsBody.closest('table').querySelector('th.writer-only');
-            if (actionHeader) {
-                if (showActionColumn) actionHeader.classList.remove('hidden');
-                else actionHeader.classList.add('hidden');
-            }
-            
-            if (document.getElementById('add-mission-form')) {
-                if (isWriterMode) {
-                    document.getElementById('add-mission-form').classList.remove('hidden');
-                } else {
-                    document.getElementById('add-mission-form').classList.add('hidden');
-                }
-            }
-
-
-            sortedMissions.forEach(data => {
-                const encodedId = encodeURIComponent(data.id);
-                const encodedName = encodeURIComponent(data.name);
-                const encodedRank = encodeURIComponent(data.baseRank);
-                
-                const actionCell = showActionColumn ? `
-                    <td class="px-6 py-2 whitespace-nowrap text-right text-sm font-medium flex gap-2">
-                        <button onclick="window.editMission('${encodedId}', '${encodedName}', '${encodedRank}')" class="text-blue-500 hover:text-blue-700 transition duration-150 edit-btn">Editar</button>
-                        <button onclick="window.deleteMission('${encodedId}')" class="text-red-500 hover:text-red-700 transition duration-150 remove-btn">Excluir</button>
-                    </td>
-                ` : '';
-
-                missionsBody.innerHTML += `
-                    <tr class="hover:bg-gray-700/50">
-                        <td class="px-6 py-2 whitespace-nowrap text-sm font-medium text-white">${data.name}</td>
-                        <td class="px-6 py-2 whitespace-nowrap text-sm text-yellow-400 font-semibold">${data.baseRank.replace('-Rank', '')}</td>
-                        <td class="px-6 py-2 whitespace-nowrap text-sm text-green-400">${data.points}</td>
-                        ${actionCell}
-                    </tr>
-                `;
-            });
-        }
-
-        // --- Inicialização ---
-        document.addEventListener('DOMContentLoaded', () => {
-            initializeFirebase(); 
-
-            const content = document.getElementById('content');
-            
-            // Listeners delegados para os botões que não estão sempre no DOM
-            content.addEventListener('click', (e) => {
-                if (e.target.id === 'add-executor-btn') {
-                    window.addExecutorEntry();
-                } else if (e.target.id === 'add-mission-btn') {
-                    window.addMissionEntry();
-                } else if (e.target.id === 'submit-report') {
-                    window.submitReport();
-                } else if (e.target.id === 'set-access-key-btn') { // NOVO BOTÃO DE LOGIN
-                    window.checkAccessKey();
-                } else if (e.target.id === 'add-ninja') {
-                    window.addNinja();
-                } else if (e.target.id === 'add-mission') {
-                    window.addMission();
-                }
-            });
-
-            // Listeners para inputs no formulário de relatório que requerem preview (devem ser delegados ou adicionados após render)
-            content.addEventListener('input', (e) => {
-                if (['clients', 'mission-details', 'support-ids'].includes(e.target.id)) {
-                    window.updateDescriptionPreview();
-                }
-            });
-        });
-    </script>
-</body>
-</html>
