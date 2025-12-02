@@ -375,7 +375,7 @@
                 Total de Pontos: ${totalPointsInput.value}
                 Descrição: ${previewDiv.textContent}
                 ---
-                Pronto para simular o envio para o Firebase!
+                Pronto para simular o envio para o Firebase! (Lógica de pontuação e registro precisa ser implementada aqui)
             `;
             
             // Aqui seria o local para chamar a função de escrita do Firebase (addDoc / setDoc)
@@ -439,24 +439,97 @@
         }
 
 
-        // Funções de CRUD (Stubs substituídos por Modal de Confirmação/Ação Real)
+        // Funções de CRUD (Implementação de lógica Firebase para Add/Delete Missões e Add Ninja)
         
-        window.addNinja = function() { console.log("addNinja called (stub)"); }
+        // IMPLEMENTAÇÃO REAL DO ADD NINJA
+        window.addNinja = async function() {
+            if (!isMasterAdminMode) {
+                window.showCustomModal('Acesso Negado', 'Você precisa de permissão de Admin Master para adicionar Guardiões.', false);
+                return;
+            }
+
+            const newNinjaIdInput = document.getElementById('new-ninja-id');
+            const ninjaId = newNinjaIdInput.value.trim();
+            const normalizedId = normalizeId(ninjaId);
+            const statusElement = document.getElementById('status');
+
+            statusElement.classList.remove('hidden');
+            statusElement.className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
+            statusElement.textContent = `Processando adição de Guardião...`;
+
+            if (!ninjaId) {
+                statusElement.textContent = '❌ O ID do Guardião não pode ser vazio.';
+                statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                setTimeout(() => statusElement.classList.add('hidden'), 5000);
+                return;
+            }
+
+            if (ninjasData[normalizedId]) {
+                statusElement.textContent = `❌ O Guardião '${normalizedId}' já está cadastrado.`;
+                statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                setTimeout(() => statusElement.classList.add('hidden'), 5000);
+                return;
+            }
+
+            try {
+                // Tenta adicionar o ninja ao Firebase
+                await setDoc(doc(db, COLLECTIONS.NINJAS, normalizedId), {
+                    id: normalizedId, 
+                    isActive: true, 
+                    rankPoints: 0, 
+                    missionsCompleted: 0
+                });
+                
+                newNinjaIdInput.value = ''; // Limpa o campo após o sucesso
+                statusElement.textContent = `✅ Guardião '${normalizedId}' adicionado com sucesso!`;
+                statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
+                setTimeout(() => statusElement.classList.add('hidden'), 5000);
+
+            } catch (e) {
+                console.error("Erro ao adicionar Guardião:", e);
+                statusElement.textContent = `❌ Erro ao adicionar Guardião: ${e.message}`;
+                statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                setTimeout(() => statusElement.classList.add('hidden'), 7000);
+            }
+        }
+        
+        // IMPLEMENTAÇÃO DE DELETE NINJA
+        window.deleteNinja = function(id) { 
+            if (!isMasterAdminMode) {
+                 window.showCustomModal('Acesso Negado', 'Você precisa de permissão de Admin Master para excluir Guardiões.', false);
+                 return;
+            }
+            window.showCustomModal('Confirmação de Exclusão', `Tem certeza que deseja excluir o Guardião '${id}'? (Ação permanente e exige Admin Master).`, true, async (confirmed) => {
+                 if (confirmed) {
+                     const statusElement = document.getElementById('status');
+                     statusElement.classList.remove('hidden');
+                     statusElement.className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
+                     statusElement.textContent = `Excluindo Guardião '${id}'...`;
+
+                     try {
+                         await deleteDoc(doc(db, COLLECTIONS.NINJAS, id));
+                         statusElement.textContent = `✅ Guardião '${id}' excluído com sucesso!`;
+                         statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
+                         
+                         // Remove da lista de executores selecionados (para Criar Relatório)
+                         selectedExecutors = selectedExecutors.filter(execId => execId !== id);
+                         window.updateExecutorTags();
+                         
+                     } catch (e) {
+                         console.error("Erro ao excluir Guardião:", e);
+                         statusElement.textContent = `❌ Erro ao excluir Guardião: ${e.message}`;
+                         statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                     }
+                     setTimeout(() => statusElement.classList.add('hidden'), 5000);
+                 }
+            });
+        }
 
         window.editNinja = function(id) { 
-             window.showCustomModal('Ação de Edição', `Função de edição de Guardião '${id}' acionada. A lógica de back-end ainda não foi implementada, mas a permissão está OK.`, false);
-        }
-        window.deleteNinja = function(id) { 
-             window.showCustomModal('Confirmação de Exclusão', `Tem certeza que deseja excluir o Guardião '${id}'? (Ação permanente, lógica de back-end não implementada).`, true, (confirmed) => {
-                 if (confirmed) {
-                     window.showCustomModal('Ação', `Exclusão de '${id}' confirmada. Executando lógica... (stub)`);
-                 } else {
-                     window.showCustomModal('Ação', `Exclusão de '${id}' cancelada.`, false);
-                 }
-             });
+             window.showCustomModal('Ação de Edição', `Função de edição de Guardião '${id}' acionada. A lógica de back-end (editar status/pontos) ainda não foi implementada, mas a permissão está OK.`, false);
         }
         
-        // IMPLEMENTAÇÃO REAL DO ADD MISSION
+        // IMPLEMENTAÇÃO REAL DO ADD MISSION (Revisada)
         window.addMission = async function() {
             if (!isWriterMode) {
                 window.showCustomModal('Acesso Negado', 'Você precisa de permissão de Escritor ou Admin para adicionar missões.', false);
@@ -505,8 +578,6 @@
                 statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
                 setTimeout(() => statusElement.classList.add('hidden'), 5000);
 
-                // O onSnapshot cuidará de atualizar a tabela e os selects do relatório.
-
             } catch (e) {
                 console.error("Erro ao adicionar missão:", e);
                 statusElement.textContent = `❌ Erro ao adicionar missão: ${e.message}`;
@@ -518,15 +589,33 @@
         window.editMission = function(id, name, rank) { 
              window.showCustomModal('Ação de Edição', `Função de edição de Missão '${decodeURIComponent(name)}' (${decodeURIComponent(rank)}) acionada. A lógica de back-end ainda não foi implementada, mas a permissão está OK.`, false);
         }
+        
+        // IMPLEMENTAÇÃO DE DELETE MISSION
         window.deleteMission = function(id) { 
+            if (!isWriterMode) {
+                 window.showCustomModal('Acesso Negado', 'Você precisa de permissão de Escritor ou Admin para excluir missões.', false);
+                 return;
+            }
             const decodedId = decodeURIComponent(id);
-             window.showCustomModal('Confirmação de Exclusão', `Tem certeza que deseja excluir a Missão '${decodedId}'? (Ação permanente, lógica de back-end não implementada).`, true, (confirmed) => {
+            window.showCustomModal('Confirmação de Exclusão', `Tem certeza que deseja excluir a Missão '${decodedId}'? (Ação permanente).`, true, async (confirmed) => {
                  if (confirmed) {
-                     window.showCustomModal('Ação', `Exclusão da Missão '${decodedId}' confirmada. Executando lógica... (stub)`);
-                 } else {
-                     window.showCustomModal('Ação', `Exclusão da Missão '${decodedId}' cancelada.`, false);
+                     const statusElement = document.getElementById('status');
+                     statusElement.classList.remove('hidden');
+                     statusElement.className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
+                     statusElement.textContent = `Excluindo Missão '${decodedId}'...`;
+                     
+                     try {
+                        await deleteDoc(doc(db, COLLECTIONS.MISSIONS, decodedId));
+                        statusElement.textContent = `✅ Missão '${decodedId}' excluída com sucesso!`;
+                        statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
+                     } catch (e) {
+                         console.error("Erro ao excluir Missão:", e);
+                         statusElement.textContent = `❌ Erro ao excluir Missão: ${e.message}`;
+                         statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                     }
+                     setTimeout(() => statusElement.classList.add('hidden'), 5000);
                  }
-             });
+            });
         }
         
         // NOVO: Adiciona uma entrada de missão ao formulário
