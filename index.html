@@ -30,13 +30,13 @@
         <!-- Auth Info for Debugging/Sharing -->
         <div id="auth-info" class="text-sm text-center text-gray-500">Aguardando autenticação...</div>
 
-        <!-- NOVO: PAINEL DE ADMINISTRAÇÃO (Acesso de Escrita/Edição) -->
+        <!-- PAINEL DE ADMINISTRAÇÃO (Acesso de Escrita/Edição) -->
         <section id="admin-panel" class="space-y-4 pt-4 pb-4 bg-gray-900 p-6 rounded-xl shadow-inner border border-yellow-500/50">
              <h2 class="text-2xl font-bold text-yellow-400 text-center flex justify-center items-center gap-2">
                  <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" /></svg>
                  Painel de Administração (Chave Mestra Individual)
              </h2>
-             <p class="text-center text-gray-400">Insira sua Chave Secreta e seu ID de Guardião para habilitar a edição e o cadastro.</p>
+             <p class="text-center text-gray-400">Insira sua Chave Secreta (devkey2024) e seu ID de Guardião para habilitar a edição e o cadastro.</p>
              <div class="flex flex-col md:flex-row gap-4 max-w-lg mx-auto">
                  <input id="admin-id-input" type="text" placeholder="Seu ID de Guardião (Executor)" class="flex-grow p-2 rounded-lg bg-gray-700 border border-gray-600 text-white shadow-inner">
                  <input id="admin-key-input" type="password" placeholder="Sua Chave Secreta Individual" class="flex-grow p-2 rounded-lg bg-gray-700 border border-gray-600 text-white shadow-inner">
@@ -48,7 +48,6 @@
 
 
         <!-- 1. FORMULÁRIO PRINCIPAL (REGISTRO DE RELATÓRIO) -->
-        <!-- Este formulário está sempre visível e não requer a Chave Admin. -->
         <section id="report-form-section" class="bg-gray-800 p-6 rounded-xl shadow-2xl space-y-6">
             <h2 class="text-2xl font-semibold border-b pb-3 border-gray-700 text-blue-300">Novo Relatório de Missão</h2>
 
@@ -295,48 +294,24 @@
     <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, collection, query, orderBy, deleteDoc, writeBatch, setLogLevel, updateDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        /**
-         * Implementação simples de SHA-256 para hashing de senhas.
-         * Garante que a chave secreta de desenvolvimento não fique em texto puro.
-         */
-        async function hashSha256(message) {
-            const encoder = new TextEncoder();
-            const data = encoder.encode(message);
-            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-            const hashArray = Array.from(new Uint8Array(hashBuffer));
-            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-            return hashHex;
-        }
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, doc, setDoc, onSnapshot, collection, writeBatch, 
+            updateDoc, getDoc, deleteDoc, setLogLevel, query, enableIndexedDbPersistence,
+            collectionGroup
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // ====================================================================
-        // IMPORTANTE: CONFIGURAÇÕES DO FIREBASE HARDCODED
-        // --------------------------------------------------------------------
-        
-        const APP_IDENTIFIER = 'guilda-konoha-2024';
-        const FIREBASE_CONFIG_JSON = null; 
-        const INITIAL_AUTH_TOKEN = null; 
-
-        const appId = APP_IDENTIFIER;
-        const firebaseConfig = FIREBASE_CONFIG_JSON;
-        const initialAuthToken = INITIAL_AUTH_TOKEN;
-
+        // CONFIGURAÇÕES DO FIREBASE & CHAVE MESTRA
         // ====================================================================
-        // CORREÇÃO DO ERRO: DEFINIÇÃO MANUAL DA CHAVE MESTRA DE DESENVOLVIMENTO
-        // A chave será 'devkey2024' (em texto puro) e será comparada com seu hash.
-        // O hash dessa chave (SHA-256) é calculado e armazenado.
         
-        // Chave de desenvolvimento: 'devkey2024'
-        const MASTER_DEV_KEY_HASH = '1e37f8184c71853d91780824b207593c6f8b9e672c84216894c252273e970220'; 
+        // Variáveis globais fornecidas pelo ambiente Canvas (devem ser usadas)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : null) || { projectId: appId };
         
-        // Em um ambiente de produção, esta lista viria de um secret manager.
-        // No contexto do Canvas, usamos o hash fixo.
-        const SECRET_KEYS_HASHED = [MASTER_DEV_KEY_HASH];
-        
+        // Chave Admin fixa para este projeto (sempre 'devkey2024')
+        const ADMIN_KEY = 'devkey2024'; 
         let isAdminMode = false;
-        // ====================================================================
 
         setLogLevel('debug'); // Ativa logs do Firestore
 
@@ -347,7 +322,7 @@
         let authReady = false;
         let currentProofId = ''; 
 
-        // Estrutura de Coleções
+        // Estrutura de Coleções (Pública)
         const COLLECTIONS = {
             MISSIONS: `artifacts/${appId}/public/data/missions`,
             REPORTS: `artifacts/${appId}/public/data/reports`,
@@ -355,9 +330,10 @@
             AUXILIARY_LOG: `artifacts/${appId}/public/data/auxiliary_log` 
         };
 
-        let missionsData = {}; 
-        let ninjasData = {}; 
-        let auxiliaryData = {}; 
+        // Cache de dados
+        let missionsData = {}; // Mapeado por doc.id
+        let ninjasData = {}; // Mapeado por ninjaId
+        let auxiliaryData = {}; // Mapeado por auxiliaryId
 
         // Mapeamento de Rank para Pontos
         const RANK_POINTS = {
@@ -378,7 +354,7 @@
             "Defesa/Raid", "NPC Quest", "Storyline"
         ];
 
-        // Ranks base para ordenação (apenas a primeira letra, exceto Defesa)
+        // Ranks base para ordenação 
         const RANK_ORDER = ['S', 'A', 'B', 'C', 'D', 'DEFESA'];
         
         /**
@@ -401,7 +377,7 @@
          * Função utilitária para gerar ID limpo para Firestore Doc ID de Missões.
          */
         function generateMissionDocId(name) {
-            return name.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
+            return name.trim().replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
         }
 
         // --- Funções de Controle de Acesso e UI ---
@@ -422,7 +398,7 @@
             setupFirestoreListeners(); 
         }
 
-        window.checkAdminKey = async function() {
+        window.checkAdminKey = function() {
             const adminIdRaw = document.getElementById('admin-id-input').value.trim();
             const adminKey = document.getElementById('admin-key-input').value.trim();
             const normalizedId = normalizeId(adminIdRaw);
@@ -436,15 +412,7 @@
                 return;
             }
 
-            // CORREÇÃO: Usa a função hashSha256 e compara com a lista de hashes
-            const hashedKey = await hashSha256(adminKey);
-
-            // Acesso Confiável (Verifica todas as chaves secretas)
-            const isMatch = SECRET_KEYS_HASHED.some(storedHashedKey => {
-                 return storedHashedKey === hashedKey;
-            });
-
-            if (isMatch) {
+            if (adminKey === ADMIN_KEY) {
                 window.toggleAdminUI(true);
                 document.getElementById('admin-key-input').value = ''; 
                 statusElement.textContent = `✅ Modo Administrador ATIVADO. Usuário: ${normalizedId}`;
@@ -452,13 +420,13 @@
                 setTimeout(() => statusElement.classList.add('hidden'), 5000);
             } else {
                 window.toggleAdminUI(false);
-                statusElement.textContent = '❌ Acesso Negado. Chave Mestra Incorreta. Apenas Modo Leitura/Registro de Relatório disponível.';
+                statusElement.textContent = '❌ Acesso Negado. Chave Mestra Incorreta. Tente "devkey2024".';
                 statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
                 setTimeout(() => statusElement.classList.add('hidden'), 7000);
             }
         }
         
-        // --- Funções de Modal Customizado ---
+        // --- Funções de Modal Customizado (Mantidas) ---
         let resolveModalPromise = null;
 
         /**
@@ -485,7 +453,9 @@
                 errorSpan.classList.add('hidden');
                 inputContainer.classList.add('hidden');
                 input1.value = '';
-                input2.innerHTML = '';
+                // Garante que o input 2 seja um select antes de modificar o innerHTML
+                const selectRank = document.getElementById('modal-input-2');
+                selectRank.innerHTML = ''; 
                 input1.type = 'text'; 
 
                 confirmBtn.onclick = null;
@@ -499,9 +469,7 @@
                     label1.textContent = 'Novo Nome da Missão:';
                     input1.value = data.name || '';
                     label2.textContent = 'Novo Rank:';
-                    input2.outerHTML = `<select id="modal-input-2" class="w-full p-2.5 rounded-lg bg-gray-700 border border-gray-600 text-white"></select>`;
-                    const selectRank = document.getElementById('modal-input-2');
-
+                    
                     RANK_OPTIONS.forEach(rank => {
                         const option = document.createElement('option');
                         option.value = rank;
@@ -556,34 +524,35 @@
             }
         }
 
-        // --- Funções de Inicialização e Autenticação ---
+        // --- Funções de Inicialização e Autenticação (Firestore) ---
         async function initializeFirebase() {
-            if (!firebaseConfig) {
-                const statusElement = document.getElementById('status');
-                if (statusElement) {
-                    statusElement.className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
-                    statusElement.textContent = `AVISO: Usando o ID da Guilda '${APP_IDENTIFIER}' como contexto. Para usar um banco de dados privado, você precisa inserir o FIREBASE_CONFIG_JSON.`;
-                }
-            }
-
             try {
-                // Configuração padrão para o Firestore (sem Auth API Key)
-                const configToUse = firebaseConfig || {
-                    authDomain: "dummy.firebaseapp.com",
-                    projectId: appId, 
-                };
-                
-                app = initializeApp(configToUse);
+                // Tenta usar a configuração injetada, senão usa uma configuração local mínima
+                app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
+                auth = getAuth(app);
+                
+                // Desabilita a persistência de indexedDB para evitar erros de "offline" no ambiente iFrame
+                // enableIndexedDbPersistence(db).catch(err => {
+                //     console.warn("Falha ao habilitar persistência local (IndexedDB). Ignorando para estabilidade.", err);
+                // });
 
-                // Forçamos um ID de usuário anônimo local
-                userId = 'anon-local-' + Math.random().toString(36).substring(2, 6);
-                authReady = true;
-                document.getElementById('auth-info').textContent = `Usuário ID (Local Anônimo): ${userId} | App ID (DB Contexto): ${appId}`;
-                setupFirestoreListeners();
-                generateProofId(); 
-                addMissionEntry(); 
-                document.getElementById('submit-report').disabled = false;
+
+                // Tenta login anônimo para ter um UID e respeitar as regras de segurança
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                    } else {
+                        const anonUser = await signInAnonymously(auth);
+                        userId = anonUser.user.uid;
+                    }
+                    authReady = true;
+                    document.getElementById('auth-info').textContent = `Usuário ID (Anon): ${userId} | App ID (DB Contexto): ${appId}`;
+                    setupFirestoreListeners();
+                    generateProofId(); 
+                    addMissionEntry(); 
+                    document.getElementById('submit-report').disabled = false;
+                });
 
             } catch (error) {
                 console.error("Erro na inicialização do Firebase:", error);
@@ -597,7 +566,7 @@
         function setupFirestoreListeners() {
             if (!authReady) return;
 
-            // 1. Missões / Quests (Tabela 6 - Última Seção)
+            // 1. Missões / Quests (Tabela 6)
             onSnapshot(collection(db, COLLECTIONS.MISSIONS), (snapshot) => {
                 missionsData = {};
                 const missionsBody = document.getElementById('missions-database');
@@ -614,7 +583,7 @@
                 snapshot.forEach(doc => {
                     const data = doc.data();
                     data.id = doc.id; 
-                    missionsData[data.name] = data; 
+                    missionsData[data.name] = data; // Mapeado por nome para facilitar o lookup no formulário
                     
                     const encodedId = encodeURIComponent(data.id);
                     const encodedName = encodeURIComponent(data.name);
@@ -649,7 +618,7 @@
                 ninjasData = {};
                 const ninjasBody = document.getElementById('ninjas-cadastro');
                 const executorSelect = document.getElementById('executor-id');
-                ninjasBody.innerHTML = '<option value="" disabled selected>Selecione o Executor</option>';
+                ninjasBody.innerHTML = '';
                 executorSelect.innerHTML = '<option value="" disabled selected>Selecione o Executor</option>';
                 
                 const showActionColumn = isAdminMode;
@@ -706,18 +675,21 @@
                 updateScoreboard(scoreboardData);
             });
             
-            // 3. Log de Auxílio (Tabela 3) - Sem Alterações
+            // 3. Log de Auxílio (Tabela 3)
             onSnapshot(collection(db, COLLECTIONS.AUXILIARY_LOG), (snapshot) => {
                 auxiliaryData = {};
                 const auxiliaryLogBody = document.getElementById('auxiliary-log');
                 auxiliaryLogBody.innerHTML = '';
                 
                 const sortedAuxiliaries = [];
-                snapshot.forEach(doc => sortedAuxiliaries.push(doc.data()));
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    auxiliaryData[data.id] = data; // Cache
+                    sortedAuxiliaries.push(data);
+                });
                 sortedAuxiliaries.sort((a, b) => b.rankPoints - a.rankPoints);
                 
                 sortedAuxiliaries.forEach(data => {
-                    auxiliaryData[data.id] = data; 
                     const lastParticipation = data.lastParticipation ? new Date(data.lastParticipation).toLocaleDateString('pt-BR') : 'N/A';
                     
                     auxiliaryLogBody.innerHTML += `
@@ -731,7 +703,7 @@
             });
 
 
-            // 4. Relatórios / Log de Missões (Tabela 4) - Sem Alterações
+            // 4. Relatórios / Log de Missões (Tabela 4)
             onSnapshot(collection(db, COLLECTIONS.REPORTS), (snapshot) => {
                 const reportsLog = document.getElementById('reports-log');
                 reportsLog.innerHTML = '';
@@ -837,9 +809,11 @@
         }
         
         function updateMissionSelects() {
+            // Mapeia o objeto de cache para um array para ordenação
+            const missionsArray = Object.values(missionsData);
             const selects = document.querySelectorAll('.mission-select-dropdown');
             
-            const orderedMissions = Object.values(missionsData).sort((a, b) => {
+            const orderedMissions = missionsArray.sort((a, b) => {
                 const rankA = cleanRankForLookup(a.baseRank);
                 const rankB = cleanRankForLookup(b.baseRank);
                 
@@ -915,8 +889,10 @@
 
             selects.forEach(select => {
                 const missionName = select.value;
-                if (missionName && missionsData[missionName]) {
-                    const mission = missionsData[missionName];
+                // CORREÇÃO DE PONTOS: Busca a missão diretamente no cache 'missionsData' pelo nome
+                const mission = missionsData[missionName]; 
+                
+                if (mission) {
                     totalPoints += mission.points;
                     selectedMissionNames.push(mission.name);
                     
@@ -966,7 +942,7 @@
             document.getElementById('submit-report').disabled = !(serviceNames.length > 0 && executorId && clients && missionDetails);
         }
         
-        // Dados iniciais com a lista fornecida (Sem Alterações)
+        // Dados iniciais com a lista fornecida (Para o caso de o banco estar vazio)
         async function seedInitialData() {
             if (!db) return;
 
@@ -998,13 +974,14 @@
 
             for (const mission of newMissionsList) {
                 const docId = generateMissionDocId(mission.name);
-                const missionRef = doc(db, COLLECTIONS.MISSIONS, docId);
+                const missionRef = doc(db, COLLECTIONS.MISSIONS, mission.name); // Usa o nome como ID
                 const cleanRank = cleanRankForLookup(mission.rank);
                 const points = RANK_POINTS[cleanRank] || 0; 
                 batch.set(missionRef, {
                     name: mission.name,
                     baseRank: mission.rank,
-                    points: points
+                    points: points,
+                    id: mission.name // Adiciona o nome como id interno para consistência
                 });
             }
 
@@ -1039,11 +1016,14 @@
             }
 
             try {
-                const docId = generateMissionDocId(name);
-                await setDoc(doc(db, COLLECTIONS.MISSIONS, docId), {
+                // Usamos o nome da missão como Doc ID, pois é único e facilita a busca
+                const missionRef = doc(db, COLLECTIONS.MISSIONS, name); 
+                
+                await setDoc(missionRef, {
                     name: name,
                     baseRank: rank,
-                    points: points
+                    points: points,
+                    id: name
                 });
                 document.getElementById('new-mission-name').value = '';
                 console.log(`Missão "${name}" (Rank ${rank}, ${points} Pts) adicionada com sucesso!`);
@@ -1055,7 +1035,7 @@
         // Editar Missão (Protegida)
         window.editMission = async function(encodedId, encodedName, encodedRank) {
             if (!isAdminMode) return; 
-            const docId = decodeURIComponent(encodedId);
+            const docId = decodeURIComponent(encodedId); // O docId é o nome da missão
             const currentName = decodeURIComponent(encodedName);
             const currentRank = decodeURIComponent(encodedRank);
 
@@ -1079,23 +1059,34 @@
                 const currentRef = doc(db, COLLECTIONS.MISSIONS, docId);
                 
                 if (finalName !== currentName) {
-                    const newDocId = generateMissionDocId(finalName);
-                    const newRef = doc(db, COLLECTIONS.MISSIONS, newDocId);
+                    const newRef = doc(db, COLLECTIONS.MISSIONS, finalName);
                     
+                    // Verifica se o novo nome já existe
+                    const newSnap = await getDoc(newRef);
+                    if (newSnap.exists()) {
+                         document.getElementById('status').textContent = `❌ Erro: O nome da missão "${finalName}" já existe.`;
+                         document.getElementById('status').classList.remove('hidden');
+                         setTimeout(() => document.getElementById('status').classList.add('hidden'), 5000);
+                         return;
+                    }
+
+                    // Move/Renomeia o documento
                     await setDoc(newRef, {
                         name: finalName,
                         baseRank: finalRank,
-                        points: newPoints
+                        points: newPoints,
+                        id: finalName 
                     });
                     await deleteDoc(currentRef); 
-                    console.log(`Missão ${currentName} (${docId}) movida/editada para ${finalName} (${newDocId}).`);
+                    console.log(`Missão ${currentName} movida/editada para ${finalName}.`);
 
                 } else {
+                    // Apenas atualiza o rank e os pontos
                     await updateDoc(currentRef, {
                         baseRank: finalRank,
                         points: newPoints
                     });
-                    console.log(`Missão ${finalName} (${docId}) atualizada para Rank ${finalRank} (${newPoints} Pts).`);
+                    console.log(`Missão ${finalName} atualizada para Rank ${finalRank} (${newPoints} Pts).`);
                 }
             } catch (error) {
                 console.error("Erro ao editar missão:", error);
@@ -1108,12 +1099,11 @@
         // Excluir Missão (Protegida)
         window.deleteMission = async function(encodedId) {
             if (!isAdminMode) return; 
-            const id = decodeURIComponent(encodedId);
-            const missionName = missionsData[Object.keys(missionsData).find(key => missionsData[key].id === id)]?.name || id;
+            const id = decodeURIComponent(encodedId); // ID é o nome da missão
 
             const shouldDelete = await openCustomModal(
                 'Confirmação de Exclusão',
-                `Tem certeza que deseja EXCLUIR a missão: "${missionName}"? Isso é irreversível.`,
+                `Tem certeza que deseja EXCLUIR a missão: "${id}"? Isso é irreversível.`,
                 'confirm'
             );
             
@@ -1146,11 +1136,16 @@
             const normalizedId = normalizeId(ninjaId); 
 
             try {
-                await setDoc(doc(db, COLLECTIONS.NINJAS, normalizedId), { 
+                // Tenta buscar o documento existente
+                const ninjaRef = doc(db, COLLECTIONS.NINJAS, normalizedId);
+                const ninjaSnap = await getDoc(ninjaRef);
+                const currentNinja = ninjaSnap.exists() ? ninjaSnap.data() : { rankPoints: 0, missionsCompleted: 0 };
+
+                await setDoc(ninjaRef, { 
                     id: normalizedId, 
                     isActive: true,
-                    rankPoints: ninjasData[normalizedId]?.rankPoints || 0,
-                    missionsCompleted: ninjasData[normalizedId]?.missionsCompleted || 0
+                    rankPoints: currentNinja.rankPoints,
+                    missionsCompleted: currentNinja.missionsCompleted
                 }, { merge: true });
                 document.getElementById('new-ninja-id').value = '';
                 console.log(`Guardião "${normalizedId}" adicionado/atualizado com sucesso!`);
@@ -1177,7 +1172,9 @@
             }
 
             try {
+                // Exclui do cadastro de Ninjas
                 await deleteDoc(doc(db, COLLECTIONS.NINJAS, normalizedId)); 
+                // Tenta excluir do log de auxílio (se existir)
                 const auxRef = doc(db, COLLECTIONS.AUXILIARY_LOG, normalizedId); 
                 await deleteDoc(auxRef).catch(() => {}); 
                 console.log(`Guardião ${normalizedId} excluído.`);
@@ -1224,7 +1221,7 @@
             }
         }
 
-        // Submeter Relatório Principal (Sem Alterações na Lógica de Admin)
+        // Submeter Relatório Principal
         document.getElementById('submit-report').addEventListener('click', async () => {
             const executorIdRaw = document.getElementById('executor-id').value;
             const clients = document.getElementById('clients').value.split(',').map(c => c.trim()).filter(c => c);
@@ -1255,6 +1252,7 @@
             try {
                 const batch = writeBatch(db);
 
+                // 1. Registro do Relatório
                 const reportData = {
                     reportId: reportId,
                     serviceNames: serviceNames,
@@ -1268,6 +1266,7 @@
                 };
                 batch.set(doc(db, COLLECTIONS.REPORTS, reportId), reportData);
 
+                // 2. Atualização do Ninja Executor
                 const ninjaRef = doc(db, COLLECTIONS.NINJAS, executorId); 
                 const currentNinjaData = ninjasData[executorId] || { rankPoints: 0, missionsCompleted: 0 };
                 
@@ -1278,6 +1277,7 @@
                     isActive: true
                 }, { merge: true });
                 
+                // 3. Atualização do Log de Auxílio
                 const currentTime = new Date().toISOString();
                 for (const supportId of supportIds) {
                     const auxRef = doc(db, COLLECTIONS.AUXILIARY_LOG, supportId); 
@@ -1292,6 +1292,7 @@
 
                 await batch.commit();
 
+                // Limpa o formulário
                 document.querySelectorAll('#report-form-section input[type="text"]').forEach(input => {
                     if (input.id !== 'proof-id') input.value = '';
                 });
@@ -1320,8 +1321,10 @@
         // --- Event Listeners para a Folha de Rosto ---
         
         document.addEventListener('DOMContentLoaded', () => {
+            // Inicialização do Firebase acontece aqui
             initializeFirebase();
             
+            // Variáveis de função globais (para uso no HTML)
             window.updateDescriptionPreview = updateDescriptionPreview;
             window.addMissionEntry = addMissionEntry;
             window.editMission = editMission;
