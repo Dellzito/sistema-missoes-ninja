@@ -207,6 +207,54 @@
             return id.trim().toLowerCase();
         }
         
+        // --- FUNÇÕES DO MODAL ---
+
+        /** Exibe o modal customizado com uma mensagem de confirmação/ação. */
+        window.showCustomModal = function(title, message, isConfirmation = false, onConfirm = () => {}, inputType = null, inputValue = null) {
+            const modal = document.getElementById('custom-modal');
+            const modalTitle = document.getElementById('modal-title');
+            const modalMessage = document.getElementById('modal-message');
+            const modalActions = document.getElementById('modal-actions');
+            const modalConfirmBtn = document.getElementById('modal-confirm-btn');
+            const modalCancelBtn = document.getElementById('modal-cancel-btn');
+            const modalInputContainer = document.getElementById('modal-input-container');
+            
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+
+            // Esconde/mostra ações e inputs conforme necessário
+            modalInputContainer.classList.add('hidden');
+            document.getElementById('modal-error').classList.add('hidden');
+            
+            if (isConfirmation) {
+                modalConfirmBtn.classList.remove('hidden');
+                modalActions.classList.remove('justify-end');
+                modalActions.classList.add('justify-between');
+                
+                // Remove listeners antigos
+                modalConfirmBtn.onclick = null;
+                modalCancelBtn.onclick = null;
+
+                modalConfirmBtn.onclick = () => {
+                    modal.classList.add('hidden');
+                    onConfirm(true);
+                };
+                modalCancelBtn.onclick = () => {
+                    modal.classList.add('hidden');
+                    onConfirm(false);
+                };
+            } else {
+                // Apenas informativo
+                modalConfirmBtn.classList.add('hidden');
+                modalActions.classList.remove('justify-between');
+                modalActions.classList.add('justify-end');
+                modalCancelBtn.onclick = () => modal.classList.add('hidden');
+            }
+
+            modal.classList.remove('hidden');
+        }
+
+        
         // --- FUNÇÕES DE LÓGICA DO FORMULÁRIO (População de Selects) ---
 
         window.updateExecutorSelect = function() {
@@ -239,8 +287,10 @@
                 // Preserva o valor selecionado se houver, ou define um padrão
                 const currentValue = select.value;
                 select.innerHTML = `<option value="" disabled selected>Selecione a Missão</option>` + missionOptions;
-                if (currentValue) {
+                if (currentValue && select.querySelector(`option[value="${currentValue}"]`)) {
                     select.value = currentValue;
+                } else {
+                     select.selectedIndex = 0;
                 }
             });
             
@@ -251,13 +301,37 @@
         }
 
 
-        // Funções de CRUD (Stubs)
+        // Funções de CRUD (Stubs substituídos por Modal de Confirmação)
+        
         window.addNinja = function() { console.log("addNinja called (stub)"); }
-        window.editNinja = function(id) { console.log(`editNinja called for ${id} (stub)`); }
-        window.deleteNinja = function(id) { console.log(`deleteNinja called for ${id} (stub)`); }
+
+        window.editNinja = function(id) { 
+             window.showCustomModal('Ação de Edição', `Função de edição de Guardião '${id}' acionada. A lógica de back-end ainda não foi implementada, mas a permissão está OK.`, false);
+        }
+        window.deleteNinja = function(id) { 
+             window.showCustomModal('Confirmação de Exclusão', `Tem certeza que deseja excluir o Guardião '${id}'? (Ação permanente, lógica de back-end não implementada).`, true, (confirmed) => {
+                 if (confirmed) {
+                     window.showCustomModal('Ação', `Exclusão de '${id}' confirmada. Executando lógica... (stub)`);
+                 } else {
+                     window.showCustomModal('Ação', `Exclusão de '${id}' cancelada.`, false);
+                 }
+             });
+        }
         window.addMission = function() { console.log("addMission called (stub)"); }
-        window.editMission = function(id, name, rank) { console.log(`editMission called for ${id} (stub)`); }
-        window.deleteMission = function(id) { console.log(`deleteMission called for ${id} (stub)`); }
+
+        window.editMission = function(id, name, rank) { 
+             window.showCustomModal('Ação de Edição', `Função de edição de Missão '${decodeURIComponent(name)}' (${decodeURIComponent(rank)}) acionada. A lógica de back-end ainda não foi implementada, mas a permissão está OK.`, false);
+        }
+        window.deleteMission = function(id) { 
+            const decodedId = decodeURIComponent(id);
+             window.showCustomModal('Confirmação de Exclusão', `Tem certeza que deseja excluir a Missão '${decodedId}'? (Ação permanente, lógica de back-end não implementada).`, true, (confirmed) => {
+                 if (confirmed) {
+                     window.showCustomModal('Ação', `Exclusão da Missão '${decodedId}' confirmada. Executando lógica... (stub)`);
+                 } else {
+                     window.showCustomModal('Ação', `Exclusão da Missão '${decodedId}' cancelada.`, false);
+                 }
+             });
+        }
         
         // NOVO: Adiciona uma entrada de missão ao formulário
         window.addMissionEntry = function(initialData = null, shouldRecalculate = true) {
@@ -301,8 +375,58 @@
                 // window.calculateTotalPoints(); // Needs implementation
             }
         }
+        
+        // LÓGICA PARA EXECUTORES SELECIONADOS
+        window.addExecutor = function() {
+            const select = document.getElementById('new-executor-id-select');
+            if (!select || !select.value) return;
 
-        window.updateExecutorTags = function() { console.log("updateExecutorTags called (stub)"); }
+            const ninjaId = select.value;
+            if (!selectedExecutors.includes(ninjaId)) {
+                selectedExecutors.push(ninjaId);
+                select.value = ''; // Reseta o select
+                window.updateExecutorTags();
+                console.log(`Executor adicionado: ${ninjaId}`);
+            } else {
+                 console.warn(`Executor '${ninjaId}' já está na lista.`);
+            }
+        }
+        
+        window.removeExecutor = function(ninjaId) {
+            selectedExecutors = selectedExecutors.filter(id => id !== ninjaId);
+            window.updateExecutorTags();
+             console.log(`Executor removido: ${ninjaId}`);
+        }
+
+        window.updateExecutorTags = function() { 
+            const container = document.getElementById('executors-tag-container');
+            const noMessage = document.getElementById('no-executor-message');
+            if (!container || !noMessage) return;
+
+            // Limpa o conteúdo e gera novas tags
+            container.innerHTML = '';
+
+            if (selectedExecutors.length === 0) {
+                noMessage.classList.remove('hidden');
+                container.appendChild(noMessage);
+                return;
+            }
+
+            selectedExecutors.forEach(id => {
+                const tagHtml = `
+                    <span class="executor-tag" id="executor-tag-${id}">
+                        ${id}
+                        <span class="executor-remove-btn" onclick="window.removeExecutor('${id}')">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                        </span>
+                    </span>
+                `;
+                container.insertAdjacentHTML('beforeend', tagHtml);
+            });
+
+            noMessage.classList.add('hidden');
+        }
+        
         window.generateReportId = function() { console.log("generateReportId called (stub)"); }
         window.updateDescriptionPreview = function() { console.log("updateDescriptionPreview called (stub)"); }
         window.copyReportId = function() { 
@@ -397,6 +521,7 @@
                 
                 const actionCell = showActionColumn ? `
                     <td class="px-6 py-2 whitespace-nowrap text-right text-sm font-medium">
+                        <!-- Botões agora chamam as funções que usam o modal -->
                         <button onclick="window.editNinja('${data.id}')" class="text-blue-500 hover:text-blue-700 transition duration-150 edit-btn mr-2">Editar Status</button>
                         <button onclick="window.deleteNinja('${data.id}')" class="text-red-500 hover:text-red-700 transition duration-150">Excluir</button>
                     </td>
@@ -451,6 +576,7 @@
                 
                 const actionCell = showActionColumn ? `
                     <td class="px-6 py-2 whitespace-nowrap text-right text-sm font-medium flex gap-2">
+                        <!-- Botões agora chamam as funções que usam o modal -->
                         <button onclick="window.editMission('${encodedId}', '${encodedName}', '${encodedRank}')" class="text-blue-500 hover:text-blue-700 transition duration-150 edit-btn">Editar</button>
                         <button onclick="window.deleteMission('${encodedId}')" class="text-red-500 hover:text-red-700 transition duration-150 remove-btn">Excluir</button>
                     </td>
@@ -693,6 +819,12 @@
                 window.renderPage(currentPage);
                 window.generateReportId(); 
                 
+                // Adiciona o listener para o botão "Adicionar Executor" após a inicialização
+                const addExecutorBtn = document.getElementById('add-executor-btn');
+                if (addExecutorBtn) {
+                     addExecutorBtn.addEventListener('click', window.addExecutor);
+                }
+
 
             } catch (error) {
                 console.error("Erro na inicialização do Firebase:", error);
@@ -1001,8 +1133,13 @@
                     // Funções de inicialização específicas para a página de relatório
                     window.updateMissionSelects(false); 
                     window.updateExecutorSelect();
-                    window.updateExecutorTags(false); 
+                    window.updateExecutorTags(); 
                     window.generateReportId();
+                    // Adiciona um listener para o botão de adicionar executor na primeira renderização da página
+                    const addExecutorBtn = document.getElementById('add-executor-btn');
+                    if (addExecutorBtn) {
+                        addExecutorBtn.onclick = window.addExecutor;
+                    }
                     window.addMissionEntry(null, false); // Adiciona a primeira linha de missão
                     window.updateDescriptionPreview();
                     break;
@@ -1054,6 +1191,7 @@
                                     <option value="" disabled selected>Selecione um Guardião Ativo</option>
                                     <!-- Options preenchidas dinamicamente por updateExecutorSelect -->
                                 </select>
+                                <!-- CORREÇÃO: Adicionado o listener de clique diretamente no HTML. O listener global será configurado no renderPage -->
                                 <button type="button" id="add-executor-btn" class="py-2.5 px-4 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition duration-200 font-semibold">
                                     Adicionar Executor
                                 </button>
