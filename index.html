@@ -552,10 +552,13 @@
 
             select.innerHTML = '<option value="" disabled selected>Selecione um Guardião Ativo</option>';
             activeNinjas.sort((a, b) => a.id.localeCompare(b.id)).forEach(ninja => {
-                const option = document.createElement('option');
-                option.value = ninja.id;
-                option.textContent = ninja.id;
-                select.appendChild(option);
+                // Apenas adiciona ao dropdown se ainda não estiver selecionado
+                if (!selectedExecutors.includes(ninja.id)) {
+                    const option = document.createElement('option');
+                    option.value = ninja.id;
+                    option.textContent = ninja.id;
+                    select.appendChild(option);
+                }
             });
         }
 
@@ -634,6 +637,7 @@
                 setTimeout(() => statusElement.classList.add('hidden'), 5000);
 
                 // CORREÇÃO: Força a atualização do seletor de executor na aba 'Criar Relatório'
+                // Isso resolve o bug de não aparecer imediatamente o novo Guardião.
                 window.updateExecutorSelect();
 
             } catch (e) {
@@ -665,6 +669,7 @@
                          // Remove da lista de executores selecionados (para Criar Relatório)
                          selectedExecutors = selectedExecutors.filter(execId => execId !== id);
                          window.updateExecutorTags();
+                         window.updateExecutorSelect(); // CORREÇÃO: Atualiza o dropdown para re-incluir o Guardião deletado, se necessário
                          
                      } catch (e) {
                          console.error("Erro ao excluir Guardião:", e);
@@ -897,13 +902,20 @@
             const noMessage = document.getElementById('no-executor-message');
             if (!container || !noMessage) return;
 
-            // Limpa o conteúdo e gera novas tags
-            container.innerHTML = '';
-
+            // CORREÇÃO: Garante a remoção completa de todas as tags visuais antes de reconstruir
+            container.querySelectorAll('.executor-tag').forEach(tag => tag.remove());
+            
+            // Lógica para adicionar tags
             if (selectedExecutors.length === 0) {
-                noMessage.classList.remove('hidden');
-                container.appendChild(noMessage);
+                // Se não há executores, exibe a mensagem (se ela foi destruída anteriormente, o JS tenta injetar ela de volta)
+                // Usando innerHTML para resetar a área e garantir que a mensagem base esteja lá.
+                container.innerHTML = '<span id="no-executor-message" class="text-gray-400 text-sm italic">Nenhum executor selecionado.</span>';
                 return;
+            }
+
+            // Se há executores, garante que a mensagem 'nenhum' seja removida/oculta se existir
+            if (noMessage && container.contains(noMessage)) {
+                noMessage.remove(); // Remove o elemento se ele ainda estiver no container
             }
 
             selectedExecutors.forEach(id => {
@@ -917,8 +929,6 @@
                 `;
                 container.insertAdjacentHTML('beforeend', tagHtml);
             });
-
-            noMessage.classList.add('hidden');
         }
         
         window.copyReportId = function() { 
