@@ -34,12 +34,12 @@
         <section id="admin-panel" class="space-y-4 pt-4 pb-4 bg-gray-900 p-6 rounded-xl shadow-inner border border-yellow-500/50">
              <h2 class="text-2xl font-bold text-yellow-400 text-center flex justify-center items-center gap-2">
                  <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" /></svg>
-                 Painel de Administração (Chave Mestra)
+                 Painel de Administração (Chave Mestra Individual)
              </h2>
-             <p class="text-center text-gray-400">Insira a Chave Mestra e seu ID de Guardião para habilitar a edição e o cadastro.</p>
+             <p class="text-center text-gray-400">Insira sua Chave Secreta e seu ID de Guardião para habilitar a edição e o cadastro.</p>
              <div class="flex flex-col md:flex-row gap-4 max-w-lg mx-auto">
                  <input id="admin-id-input" type="text" placeholder="Seu ID de Guardião (Executor)" class="flex-grow p-2 rounded-lg bg-gray-700 border border-gray-600 text-white shadow-inner">
-                 <input id="admin-key-input" type="password" placeholder="Chave Mestra Secreta" class="flex-grow p-2 rounded-lg bg-gray-700 border border-gray-600 text-white shadow-inner">
+                 <input id="admin-key-input" type="password" placeholder="Sua Chave Secreta Individual" class="flex-grow p-2 rounded-lg bg-gray-700 border border-gray-600 text-white shadow-inner">
                  <button id="set-admin-key" class="w-full md:w-auto py-2 px-4 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-bold text-white transition duration-200">
                      Verificar Acesso
                  </button>
@@ -298,36 +298,48 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, onSnapshot, collection, query, orderBy, deleteDoc, writeBatch, setLogLevel, updateDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
+        // Implementação simples de SHA-256 para hashing de senhas.
+        async function hashSha256(message) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(message);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            return hashHex;
+        }
+
         // ====================================================================
         // IMPORTANTE: CONFIGURAÇÕES DO FIREBASE HARDCODED
         // --------------------------------------------------------------------
         
-        // 1. Defina um ID ÚNICO para o seu App/Guilda.
         const APP_IDENTIFIER = 'guilda-konoha-2024';
-        
-        // 2. Cole a configuração JSON do seu projeto Firebase aqui.
         const FIREBASE_CONFIG_JSON = null; 
-        
-        // 3. Token de Autenticação.
         const INITIAL_AUTH_TOKEN = null; 
 
-        // VARIÁVEIS INTERNAS (NÃO MEXER):
         const appId = APP_IDENTIFIER;
         const firebaseConfig = FIREBASE_CONFIG_JSON;
         const initialAuthToken = INITIAL_AUTH_TOKEN;
 
         // ====================================================================
-        // CHAVE MESTRA SECRETA (Lida do Ambiente de Hospedagem)
-        // O código prioriza process.env.ADMIN_MASTER_KEY.
+        // CHAVES MESTRAS SECRETAS (Até 12, Lidas do Ambiente de Hospedagem)
+        // O código prioriza process.env.ADMIN_KEY_N.
         // Se a variável de ambiente não for encontrada (ex: rodando localmente sem Vercel),
         // ele usará a CHAVE DE FALLBACK.
-        // **SUBSTITUA O VALOR DA CHAVE DE FALLBACK ABAIXO**
-        const FALLBACK_KEY = 'DEVTEST'; 
+        const FALLBACK_KEY_HASH = '1f40954b07e786b460d05c0836551b9e27c191a92e106b12a81387d894e666a3'; // Hash de 'DEVTEST'
+        let SECRET_KEY_HASHES = []; 
 
-        const ADMIN_MASTER_KEY_SECRET = (typeof process !== 'undefined' && process.env && process.env.ADMIN_MASTER_KEY) 
-            ? process.env.ADMIN_MASTER_KEY 
-            : FALLBACK_KEY; 
+        // Tenta buscar 12 chaves do ambiente
+        for (let i = 1; i <= 12; i++) {
+            const key = (typeof process !== 'undefined' && process.env && process.env[`ADMIN_KEY_${i}`]) 
+                ? process.env[`ADMIN_KEY_${i}`] 
+                : (i === 1 ? FALLBACK_KEY_HASH : null); // Apenas ADMIN_KEY_1 usa o fallback
 
+            if (key) {
+                // Se a chave for um hash (64 caracteres) ou uma chave em texto plano
+                SECRET_KEY_HASHES.push(key);
+            }
+        }
+        
         let isAdminMode = false;
         // ====================================================================
 
@@ -415,18 +427,51 @@
             setupFirestoreListeners(); 
         }
 
-        window.checkAdminKey = function() {
+        window.checkAdminKey = async function() {
             const adminIdRaw = document.getElementById('admin-id-input').value.trim();
             const adminKey = document.getElementById('admin-key-input').value.trim();
             const normalizedId = normalizeId(adminIdRaw);
 
             const statusElement = document.getElementById('status');
             
-            // Verifica se a chave digitada corresponde à chave SECRETA (Vercel ou Fallback).
-            if (adminKey === ADMIN_MASTER_KEY_SECRET) {
-                // Se a chave estiver correta, o ID digitado se torna o ID do Admin
+            if (!adminIdRaw || !adminKey) {
+                statusElement.textContent = '❌ Preencha seu ID de Guardião e a Chave Secreta.';
+                statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                setTimeout(() => statusElement.classList.add('hidden'), 5000);
+                return;
+            }
+
+            // 1. Hash da chave digitada pelo usuário
+            let keyHash;
+            try {
+                keyHash = await hashSha256(adminKey);
+            } catch (e) {
+                console.error("Erro ao gerar hash:", e);
+                statusElement.textContent = '❌ Erro ao processar a chave. Tente novamente.';
+                statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                return;
+            }
+            
+            // 2. Compara o hash gerado com os hashes armazenados (se estiverem em texto plano)
+            // Se as chaves do ambiente já estiverem em hash, verifica a correspondência.
+            const isMatch = SECRET_KEY_HASHES.some(storedHashOrKey => {
+                 // Verifica se o valor armazenado é o hash (64 caracteres)
+                 if (storedHashOrKey.length === 64) {
+                    return storedHashOrKey === keyHash;
+                 } else {
+                    // Se o valor armazenado não for um hash (ex: fallback local), hasheia e compara.
+                    // Isso é complexo e não recomendado. Para simplificar, assumimos que as 
+                    // chaves do Vercel são a CHAVE PLANA.
+                    // ATENÇÃO: Por simplicidade e desempenho, vamos assumir que as chaves
+                    // do Vercel estão em TEXTO PLANO e hasheá-las ANTES da comparação.
+                    // Isso significa que você deve digitar a CHAVE SECRETA (ex: KonohaAdmin42) no Vercel.
+                    return storedHashOrKey === adminKey; 
+                 }
+            });
+
+            if (isMatch) {
                 window.toggleAdminUI(true);
-                document.getElementById('admin-key-input').value = ''; // Limpa chave após sucesso
+                document.getElementById('admin-key-input').value = ''; 
                 statusElement.textContent = `✅ Modo Administrador ATIVADO. Usuário: ${normalizedId}`;
                 statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
                 setTimeout(() => statusElement.classList.add('hidden'), 5000);
@@ -556,7 +601,7 @@
                 app = initializeApp(configToUse);
                 db = getFirestore(app);
 
-                // Como não usamos Auth API Key, forçamos um ID de usuário anônimo local
+                // Forçamos um ID de usuário anônimo local
                 userId = 'anon-local-' + Math.random().toString(36).substring(2, 6);
                 authReady = true;
                 document.getElementById('auth-info').textContent = `Usuário ID (Local Anônimo): ${userId} | App ID (DB Contexto): ${appId}`;
@@ -903,8 +948,8 @@
                     const currentRank = cleanRankForLookup(mission.baseRank);
                     const highestRankClean = cleanRankForLookup(highestRank);
 
-                    const currentIndex = RANK_ORDER.findIndex(r => rankA.startsWith(r.toUpperCase()));
-                    const highestIndex = RANK_ORDER.findIndex(r => rankB.startsWith(r.toUpperCase()));
+                    const currentIndex = RANK_ORDER.findIndex(r => currentRank.startsWith(r.toUpperCase()));
+                    const highestIndex = RANK_ORDER.findIndex(r => highestRankClean.startsWith(r.toUpperCase()));
 
                     if (highestIndex === -1 || currentIndex < highestIndex) {
                         highestRank = mission.baseRank;
@@ -1166,7 +1211,7 @@
             }
         }
         
-        // Editar Guardião (Status) (Protegido)
+        // Editar Guardião (Status) (Protegida)
         window.editNinja = async function(encodedId) {
             if (!isAdminMode) return; 
             const id = decodeURIComponent(encodedId);
