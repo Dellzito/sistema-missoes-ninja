@@ -286,6 +286,7 @@
             missionSelects.forEach(select => {
                 const selectedOption = select.options[select.selectedIndex];
                 if (selectedOption && selectedOption.value) {
+                    // Busca os pontos no atributo data-points da opção selecionada
                     const points = parseInt(selectedOption.getAttribute('data-points') || '0', 10);
                     totalPoints += points;
                     missionCount++;
@@ -294,9 +295,9 @@
 
             totalPointsInput.value = totalPoints;
 
-            // Habilita o botão de submissão se houver pelo menos 1 executor e 1 missão
+            // Habilita o botão de submissão se houver pelo menos 1 executor e 1 missão que pontua
             const hasExecutors = selectedExecutors.length > 0;
-            const isReady = hasExecutors && missionCount > 0 && totalPoints > 0; // Adicionando totalPoints > 0 como condição para missions que pontuam
+            const isReady = isWriterMode && hasExecutors && missionCount > 0 && totalPoints > 0; 
             submitBtn.disabled = !isReady;
             
             if (isReady) {
@@ -438,7 +439,7 @@
         }
 
 
-        // Funções de CRUD (Stubs substituídos por Modal de Confirmação)
+        // Funções de CRUD (Stubs substituídos por Modal de Confirmação/Ação Real)
         
         window.addNinja = function() { console.log("addNinja called (stub)"); }
 
@@ -454,8 +455,66 @@
                  }
              });
         }
-        window.addMission = function() { console.log("addMission called (stub)"); }
+        
+        // IMPLEMENTAÇÃO REAL DO ADD MISSION
+        window.addMission = async function() {
+            if (!isWriterMode) {
+                window.showCustomModal('Acesso Negado', 'Você precisa de permissão de Escritor ou Admin para adicionar missões.', false);
+                return;
+            }
 
+            const nameInput = document.getElementById('new-mission-name');
+            const rankSelect = document.getElementById('new-mission-rank-select');
+            const name = nameInput.value.trim();
+            const rank = rankSelect.value;
+            const statusElement = document.getElementById('status');
+            
+            statusElement.classList.remove('hidden');
+            statusElement.className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
+            statusElement.textContent = `Processando adição de missão...`;
+
+            if (!name) {
+                statusElement.textContent = '❌ O nome da missão não pode ser vazio.';
+                statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                setTimeout(() => statusElement.classList.add('hidden'), 5000);
+                return;
+            }
+
+            if (missionsData[name]) {
+                statusElement.textContent = `❌ A missão '${name}' já existe.`;
+                statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                setTimeout(() => statusElement.classList.add('hidden'), 5000);
+                return;
+            }
+
+            const cleanRank = cleanRankForLookup(rank);
+            const points = RANK_POINTS[cleanRank] || 0;
+            const docId = name;
+
+            try {
+                // Tenta adicionar a missão ao Firebase
+                await setDoc(doc(db, COLLECTIONS.MISSIONS, docId), {
+                    name: name,
+                    baseRank: rank,
+                    points: points,
+                    id: name
+                });
+                
+                nameInput.value = ''; // Limpa o campo após o sucesso
+                statusElement.textContent = `✅ Missão '${name}' (${rank}) adicionada com sucesso!`;
+                statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
+                setTimeout(() => statusElement.classList.add('hidden'), 5000);
+
+                // O onSnapshot cuidará de atualizar a tabela e os selects do relatório.
+
+            } catch (e) {
+                console.error("Erro ao adicionar missão:", e);
+                statusElement.textContent = `❌ Erro ao adicionar missão: ${e.message}`;
+                statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+                setTimeout(() => statusElement.classList.add('hidden'), 7000);
+            }
+        }
+        
         window.editMission = function(id, name, rank) { 
              window.showCustomModal('Ação de Edição', `Função de edição de Missão '${decodeURIComponent(name)}' (${decodeURIComponent(rank)}) acionada. A lógica de back-end ainda não foi implementada, mas a permissão está OK.`, false);
         }
@@ -481,7 +540,7 @@
             const missionEntryHtml = `
                 <div id="mission-entry-${entryId}" class="p-3 bg-gray-700 rounded-lg space-y-2 border border-gray-600">
                     <div class="flex items-center justify-between">
-                        <label class="text-sm font-medium text-gray-300">Missão #${container.children.length + 1}</label>
+                        <label class="text-sm font-medium text-gray-300">Entrada de Missão</label>
                         <button type="button" onclick="window.removeMissionEntry('${entryId}')" class="text-red-400 hover:text-red-500 transition remove-btn" title="Remover Missão">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 100 2h2a1 1 0 100-2h-2z" clip-rule="evenodd" /></svg>
                         </button>
@@ -501,9 +560,6 @@
             if (initialData && initialData.name) {
                  document.getElementById(`mission-select-${entryId}`).value = initialData.name;
             }
-            
-            // window.calculateTotalPoints(); // Needs implementation
-
         }
 
         window.removeMissionEntry = function(entryId) {
