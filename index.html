@@ -116,7 +116,7 @@
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, doc, setDoc, onSnapshot, collection, writeBatch, 
-            updateDoc, getDoc, deleteDoc, getDocs, setLogLevel
+            updateDoc, getDoc, deleteDoc, getDocs, setLogLevel, addDoc // ADICIONADO addDoc para Logs
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // ====================================================================
@@ -145,6 +145,7 @@
         let isMasterAdminMode = false; // Controle de acesso total
         let isWriterMode = false; // Controle de acesso para Criar Relatório / Editar Missões
         let currentPage = 'home';
+        let currentAccessId = 'ANONYMOUS'; // NOVO: Armazena o ID de acesso logado (MASTER_ADMIN, GUARDIAN_1, etc.)
         
         // Firestore instances and IDs
         let app;
@@ -167,7 +168,8 @@
             REPORTS: `artifacts/${appId}/public/data/reports`,
             NINJAS: `artifacts/${appId}/public/data/ninjas`, 
             AUXILIARY_LOG: `artifacts/${appId}/public/data/auxiliary_log`,
-            ACCESS_KEYS: `artifacts/${appId}/public/data/access_keys` // NOVO
+            ACCESS_KEYS: `artifacts/${appId}/public/data/access_keys`, // NOVO
+            AUDIT_LOG: `artifacts/${appId}/public/data/audit_log` // NOVO: Log de Auditoria
         };
 
         // Mapeamento de Rank para Pontos e Constantes (Mantidas)
@@ -184,8 +186,33 @@
         setLogLevel('debug'); 
 
         // ====================================================================
-        // FUNÇÕES DE UTILIDADE E RENDERIZAÇÃO DE DADOS (Movidas para cima)
+        // FUNÇÕES DE LOG E UTILIDADE
         // ====================================================================
+        
+        /**
+         * Registra uma ação crítica no log de auditoria.
+         * @param {string} action - Descrição da ação (Ex: 'EDIT_MISSION').
+         * @param {object} details - Detalhes da ação.
+         */
+        window.logAction = async function(action, details) {
+            if (!db) return;
+            
+            try {
+                const logData = {
+                    timestamp: new Date().toISOString(),
+                    actorId: currentAccessId, // O ID de acesso que fez o login
+                    userId: userId, // O ID único do usuário no Firebase
+                    action: action,
+                    details: details,
+                    level: isMasterAdminMode ? 'MASTER_ADMIN' : (isWriterMode ? 'WRITER' : 'ANON')
+                };
+
+                await addDoc(collection(db, COLLECTIONS.AUDIT_LOG), logData);
+                console.log(`[AUDIT] Log registrado: ${action} por ${currentAccessId}`);
+            } catch (e) {
+                console.error("[AUDIT] Falha ao registrar log:", e);
+            }
+        }
         
         function getRankIcon(rank) {
             if (rank === 1) return '🥇';
@@ -644,6 +671,9 @@
                 // CORREÇÃO: Força a atualização do seletor de executor na aba 'Criar Relatório'
                 // Isso resolve o bug de não aparecer imediatamente o novo Guardião.
                 window.updateExecutorSelect();
+                
+                // LOG DE AUDITORIA
+                window.logAction('ADD_GUARDIAN', { guardianId: normalizedId });
 
             } catch (e) {
                 console.error("Erro ao adicionar Guardião:", e);
@@ -676,6 +706,9 @@
                          window.updateExecutorTags();
                          window.updateExecutorSelect(); // CORREÇÃO: Atualiza o dropdown para re-incluir o Guardião deletado, se necessário
                          
+                         // LOG DE AUDITORIA
+                         window.logAction('DELETE_GUARDIAN', { guardianId: id });
+                         
                      } catch (e) {
                          console.error("Erro ao excluir Guardião:", e);
                          statusElement.textContent = `❌ Erro ao excluir Guardião: ${e.message}`;
@@ -694,12 +727,13 @@
             }
             const ninja = ninjasData[id];
             if (!ninja) return;
+            const currentStatus = ninja.isActive;
 
             window.openCustomModal(
                 'Alternar Status do Guardião', 
                 null, 
                 'ninjaEdit', 
-                { id: ninja.id, isActive: ninja.isActive }
+                { id: ninja.id, isActive: currentStatus }
             ).then(async (confirmed) => {
                  if (confirmed) {
                      const statusElement = document.getElementById('status');
@@ -709,12 +743,16 @@
                      
                      try {
                          const ninjaRef = doc(db, COLLECTIONS.NINJAS, id);
-                         const newStatus = !ninja.isActive;
+                         const newStatus = !currentStatus;
                          
                          await updateDoc(ninjaRef, { isActive: newStatus });
                          
                          statusElement.textContent = `✅ Status de '${id}' alterado para ${newStatus ? 'ATIVO' : 'INATIVO'} com sucesso!`;
                          statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
+                         
+                         // LOG DE AUDITORIA
+                         window.logAction('EDIT_GUARDIAN_STATUS', { guardianId: id, oldStatus: currentStatus ? 'ATIVO' : 'INATIVO', newStatus: newStatus ? 'ATIVO' : 'INATIVO' });
+                         
                      } catch (e) {
                          console.error("Erro ao alterar status:", e);
                          statusElement.textContent = `❌ Erro ao alterar status: ${e.message}`;
@@ -774,6 +812,9 @@
                 statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
                 setTimeout(() => statusElement.classList.add('hidden'), 5000);
 
+                // LOG DE AUDITORIA
+                window.logAction('ADD_MISSION', { missionName: name, rank: rank, points: points });
+
             } catch (e) {
                 console.error("Erro ao adicionar missão:", e);
                 statusElement.textContent = `❌ Erro ao adicionar missão: ${e.message}`;
@@ -806,6 +847,15 @@
                         const cleanRank = cleanRankForLookup(newRank);
                         const points = RANK_POINTS[cleanRank] || 0;
                         
+                        // LOG DE AUDITORIA ANTES DA MUDANÇA
+                        window.logAction('EDIT_MISSION', { 
+                            oldName: currentName, 
+                            newName: newName,
+                            oldRank: currentRank,
+                            newRank: newRank,
+                            newPoints: points
+                        });
+
                         // Se o nome mudou, deletamos o antigo e criamos o novo
                         if (newName !== currentName) {
                             if (missionsData[newName]) {
@@ -830,6 +880,14 @@
 
                         statusElement.textContent = `✅ Missão '${newName}' atualizada com sucesso!`;
                         statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
+                        
+                        // NOVO PASSO: Informa que o recalculo é necessário para ver os novos pontos no rank
+                         window.openCustomModal(
+                             'Atenção: Recalculo Necessário', 
+                             'Os pontos da missão foram atualizados. Para que essa alteração afete o Rank dos Guardiões (retrotivamente), o Admin Master deve usar o botão "Recalcular Todos os Ranks Agora" na aba Autorização.', 
+                             'info'
+                         );
+                        
                      } catch (e) {
                          console.error("Erro ao editar Missão:", e);
                          statusElement.textContent = `❌ Erro ao editar Missão: ${e.message}`;
@@ -859,6 +917,17 @@
                         await deleteDoc(doc(db, COLLECTIONS.MISSIONS, decodedId));
                         statusElement.textContent = `✅ Missão '${decodedId}' excluída com sucesso!`;
                         statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
+                        
+                        // LOG DE AUDITORIA
+                        window.logAction('DELETE_MISSION', { missionName: decodedId });
+                        
+                         // NOVO PASSO: Informa que o recalculo é necessário para remover os pontos desta missão do rank
+                         window.openCustomModal(
+                             'Atenção: Recalculo Necessário', 
+                             'A missão foi excluída. Para que os pontos desta missão sejam removidos do Rank dos Guardiões (retrotivamente), o Admin Master deve usar o botão "Recalcular Todos os Ranks Agora" na aba Autorização.', 
+                             'info'
+                         );
+                        
                      } catch (e) {
                          console.error("Erro ao excluir Missão:", e);
                          statusElement.textContent = `❌ Erro ao excluir Missão: ${e.message}`;
@@ -996,7 +1065,7 @@
 
             const confirmed = await window.openCustomModal(
                 'Confirmação de Exclusão de Histórico', 
-                'Tem certeza que deseja DELETAR TODO o Histórico de Auxílio? Esta ação é IRREVERSÍVEL e exige Admin Master.', 
+                'Tem certeza que deseja DELETAR TODO o Histórico de Auxílio? Esta ação é IRREVERSÍVEL. Os Ranks de Guardiões (NINJAS) NÃO serão resetados.', 
                 'confirm'
             );
             
@@ -1004,36 +1073,29 @@
                 const statusElement = document.getElementById('status');
                 statusElement.classList.remove('hidden');
                 statusElement.className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
-                statusElement.textContent = `Iniciando exclusão do Log de Auxílio e resetando pontos...`;
+                statusElement.textContent = `Iniciando exclusão do Log de Auxílio...`;
                 
                 try {
                     const auxCollectionRef = collection(db, COLLECTIONS.AUXILIARY_LOG);
-                    const ninjaCollectionRef = collection(db, COLLECTIONS.NINJAS);
-
-                    const auxSnapshot = await getDocs(auxCollectionRef); // Usa getDocs
-                    const ninjaSnapshot = await getDocs(ninjaCollectionRef);
-                    const batch = writeBatch(db);
-                    let count = 0;
+                    const auxSnapshot = await getDocs(auxCollectionRef); 
+                    
+                    let batch = writeBatch(db);
+                    let auxCount = 0;
 
                     // 1. Deleta todos os logs de auxílio
                     auxSnapshot.forEach((doc) => {
                         batch.delete(doc.ref);
-                        count++;
-                    });
-                    
-                    // 2. Reseta os pontos dos Guardiões (Apenas missionsCompleted e rankPoints)
-                    ninjaSnapshot.forEach((doc) => {
-                         // Reseta apenas os campos que representam o Rank/Pontuação, mantendo o status isActive
-                        batch.update(doc.ref, { 
-                            rankPoints: 0,
-                            missionsCompleted: 0
-                        });
+                        auxCount++;
                     });
 
                     await batch.commit();
 
-                    statusElement.textContent = `✅ Sucesso! ${count} registros de auxílio excluídos e Ranks de Guardiões resetados.`;
+                    statusElement.textContent = `✅ Sucesso! ${auxCount} registros de auxílio excluídos.`;
                     statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
+                    
+                    // LOG DE AUDITORIA
+                    window.logAction('CLEAR_AUXILIARY_LOG', { deletedCount: auxCount });
+
                 } catch (e) {
                     console.error("Erro ao excluir Log de Auxílio:", e);
                     statusElement.textContent = `❌ Erro ao excluir Log de Auxílio: ${e.message}`;
@@ -1052,7 +1114,7 @@
 
             const confirmed = await window.openCustomModal(
                 'Confirmação de Exclusão de Histórico', 
-                'Tem certeza que deseja DELETAR TODO o Histórico de Relatórios? Esta ação é IRREVERSÍVEL e exige Admin Master.', 
+                'Tem certeza que deseja DELETAR TODO o Histórico de Relatórios e ZERAR os Ranks? Esta ação é IRREVERSÍVEL.', 
                 'confirm'
             );
             
@@ -1067,10 +1129,11 @@
                     const ninjaCollectionRef = collection(db, COLLECTIONS.NINJAS);
                     const auxCollectionRef = collection(db, COLLECTIONS.AUXILIARY_LOG);
                     
-                    const reportsSnapshot = await getDocs(reportsCollectionRef); // Usa getDocs
-                    const ninjaSnapshot = await getDocs(ninjaCollectionRef);
+                    const reportsSnapshot = await getDocs(reportsCollectionRef); 
                     const auxSnapshot = await getDocs(auxCollectionRef);
-                    const batch = writeBatch(db);
+                    const ninjaSnapshot = await getDocs(ninjaCollectionRef);
+                    
+                    let batch = writeBatch(db);
                     let reportCount = 0;
 
                     // 1. Deleta todos os relatórios
@@ -1081,14 +1144,10 @@
                     
                     // 2. Reseta os pontos dos Guardiões (NINJAS)
                     ninjaSnapshot.forEach((doc) => {
-                         // Reseta apenas os campos que representam o Rank/Pontuação, mantendo o status isActive
-                        batch.update(doc.ref, { 
-                            rankPoints: 0,
-                            missionsCompleted: 0
-                        });
+                        batch.update(doc.ref, { rankPoints: 0, missionsCompleted: 0 });
                     });
                     
-                    // 3. Deleta todos os logs de auxílio (já que os relatórios foram excluídos, o auxílio também deve ser zerado)
+                    // 3. Deleta todos os logs de auxílio (já que os relatórios foram excluídos)
                     auxSnapshot.forEach((doc) => {
                         batch.delete(doc.ref);
                     });
@@ -1097,6 +1156,10 @@
 
                     statusElement.textContent = `✅ Sucesso! ${reportCount} relatórios excluídos e Ranks de Guardiões/Auxílio resetados.`;
                     statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
+                    
+                    // LOG DE AUDITORIA
+                    window.logAction('CLEAR_REPORTS_LOG_AND_RESET_RANKS', { deletedReportCount: reportCount });
+                    
                 } catch (e) {
                     console.error("Erro ao excluir Log de Relatórios:", e);
                     statusElement.textContent = `❌ Erro ao excluir Log de Relatórios: ${e.message}`;
@@ -1104,6 +1167,142 @@
                 }
                 setTimeout(() => statusElement.classList.add('hidden'), 5000);
             }
+        }
+        
+        // NOVO: Função para recalcular o Rank de todos os Guardiões e Auxiliares (com base nos pontos ATUAIS das missões)
+        window.recalculateAllRanks = async function() {
+            if (!isWriterMode) { // ALTERADO PARA WRITER MODE
+                window.openCustomModal('Acesso Negado', 'Você precisa de permissão de Escritor ou Admin para recalcular os Ranks.', 'info');
+                return;
+            }
+
+            const confirmed = await window.openCustomModal(
+                'Confirmação de Recálculo Total', 
+                'Tem certeza que deseja RECALCULAR todos os Ranks? Isso irá ZERAR os pontos atuais e recontá-los com base nos valores ATUAIS das missões (do Gerenciamento de Missões).', 
+                'confirm'
+            );
+            
+            if (!confirmed) return;
+
+            const statusElement = document.getElementById('status');
+            statusElement.classList.remove('hidden');
+            statusElement.className = 'text-yellow-400 p-4 bg-yellow-900/50 rounded-lg block';
+            statusElement.textContent = `Iniciando Recálculo Global de Ranks... (Fase 1/3: Resetando Totais)`;
+            
+            try {
+                // Fases 1 & 2: Reset e Recálculo em Memória
+                
+                // Cópia em memória para calcular os novos totais
+                const tempNinjas = {}; 
+                const tempAux = {};
+                
+                // Inicializa as cópias e zera os pontos
+                Object.values(ninjasData).forEach(ninja => {
+                    tempNinjas[ninja.id] = { ...ninja, rankPoints: 0, missionsCompleted: 0 };
+                });
+                
+                // Inicializa o Auxiliar com 0 pontos para aqueles que existem
+                Object.values(auxiliaryData).forEach(aux => {
+                    tempAux[aux.id] = { ...aux, rankPoints: 0 };
+                });
+
+                // Zera todos os pontos no Firebase (Phase 1 Commit)
+                let resetBatch = writeBatch(db);
+                Object.values(ninjasData).forEach(ninja => {
+                    const ninjaRef = doc(db, COLLECTIONS.NINJAS, ninja.id);
+                    resetBatch.update(ninjaRef, { rankPoints: 0, missionsCompleted: 0 });
+                });
+                Object.values(auxiliaryData).forEach(aux => {
+                    const auxRef = doc(db, COLLECTIONS.AUXILIARY_LOG, aux.id);
+                    // Aqui, em vez de deletar, zera para manter os IDs de auxílio
+                    resetBatch.update(auxRef, { rankPoints: 0 }); 
+                });
+                await resetBatch.commit();
+
+
+                // 3. Recontar Pontos com os VALORES ATUAIS das Missões (Phase 2 Recount)
+                statusElement.textContent = `Fase 2/3: Recalculando pontos de ${reportsData.length} relatórios...`;
+                
+                reportsData.forEach((report) => {
+                    let currentReportPoints = 0;
+                    let missionCount = 0;
+
+                    // Calcula os pontos do relatório com base nos VALORES ATUAIS em missionsData
+                    report.serviceNames.forEach(missionName => {
+                        const mission = missionsData[missionName];
+                        if (mission) {
+                            currentReportPoints += mission.points;
+                            missionCount++;
+                        }
+                    });
+
+                    // Aplica os novos pontos aos Executores (NINJAS) no cache temporário
+                    if (report.executorIds && currentReportPoints > 0) {
+                        report.executorIds.forEach(executorId => {
+                             if (!tempNinjas[executorId]) {
+                                 // Cria o ninja temporário se ele não existia no início (deve ser raro, mas seguro)
+                                 tempNinjas[executorId] = { id: executorId, isActive: true, rankPoints: 0, missionsCompleted: 0 };
+                             }
+                             tempNinjas[executorId].rankPoints += currentReportPoints;
+                             tempNinjas[executorId].missionsCompleted += missionCount;
+                        });
+                    }
+
+                    // Aplica os novos pontos aos Auxiliares (AUXILIARY_LOG) no cache temporário
+                    if (report.supportIds && currentReportPoints > 0) {
+                         report.supportIds.forEach(supportId => {
+                              if (report.executorIds && report.executorIds.includes(supportId)) return;
+                              
+                              if (!tempAux[supportId]) {
+                                   // Cria o auxiliar se não existia no início (com a última participação do relatório)
+                                   tempAux[supportId] = { id: supportId, rankPoints: 0, lastParticipation: report.timestamp };
+                              }
+                              tempAux[supportId].rankPoints += currentReportPoints;
+                              // Atualiza a última participação (para auxilio, o timestamp é importante)
+                              if (report.timestamp > (tempAux[supportId].lastParticipation || '')) {
+                                   tempAux[supportId].lastParticipation = report.timestamp;
+                              }
+                         });
+                    }
+                }); 
+                
+                // 4. Aplica os novos totais calculados no Firebase (Phase 3 Commit)
+                statusElement.textContent = `Fase 3/3: Aplicando novos Ranks...`;
+                let applyBatch = writeBatch(db);
+                
+                // Aplica totais de Ninjas
+                Object.values(tempNinjas).forEach(ninja => {
+                    const ninjaRef = doc(db, COLLECTIONS.NINJAS, ninja.id);
+                    applyBatch.update(ninjaRef, { 
+                        rankPoints: ninja.rankPoints, 
+                        missionsCompleted: ninja.missionsCompleted
+                    });
+                });
+
+                // Aplica totais de Auxiliares
+                Object.values(tempAux).forEach(aux => {
+                    const auxRef = doc(db, COLLECTIONS.AUXILIARY_LOG, aux.id);
+                    applyBatch.set(auxRef, { 
+                        id: aux.id,
+                        rankPoints: aux.rankPoints,
+                        lastParticipation: aux.lastParticipation // Mantém a última participação
+                    }, { merge: true });
+                });
+
+                await applyBatch.commit();
+                
+                statusElement.textContent = `✅ Sucesso! Recálculo de Ranks concluído. ${reportsData.length} relatórios processados.`;
+                statusElement.className = 'text-green-400 p-4 bg-green-900/50 rounded-lg block';
+                
+                // LOG DE AUDITORIA
+                window.logAction('RECALCULATE_RANKS_GLOBAL', { reportCount: reportsData.length });
+                
+            } catch (e) {
+                console.error("Erro no Recálculo Global:", e);
+                statusElement.textContent = `❌ Erro no Recálculo: ${e.message}. Tente novamente.`;
+                statusElement.className = 'text-red-400 p-4 bg-red-900/50 rounded-lg block';
+            }
+            setTimeout(() => statusElement.classList.add('hidden'), 7000);
         }
 
         window.renderScoreboard = function() {
@@ -1468,6 +1667,7 @@
                 // Login Anônimo para acesso BÁSICO (Leitura)
                 const anonUser = await signInAnonymously(auth);
                 userId = anonUser.user.uid;
+                currentAccessId = 'ANONYMOUS'; // Define o ID de acesso inicial
                 
                 document.getElementById('auth-info').textContent = `Usuário ID (Anon): ${userId} | App ID (DB Contexto): ${appId}`;
                 setupFirestoreListeners(); // Inicia os listeners de dados
@@ -1708,6 +1908,8 @@
 
             if (accessData && accessData.key === key) {
                 
+                currentAccessId = id; // Define o ID de acesso
+                
                 if (accessData.level === 'master_admin') {
                     window.toggleMasterAdminUI(true);
                     window.toggleWriterUI(true);
@@ -1734,6 +1936,7 @@
                 window.renderPage(currentPage);
                 
             } else {
+                currentAccessId = 'ANONYMOUS'; // Reseta o ID de acesso
                 window.toggleWriterUI(false);
                 window.toggleMasterAdminUI(false);
                 statusElement.textContent = '❌ Autorização Negada. ID ou Senha Incorreta.';
@@ -2070,16 +2273,26 @@
                     </div>
                 </section>
 
-                <!-- Master Admin Tools (Exclusão de Histórico) -->
-                <div id="admin-tools" class="pt-8 space-y-4 admin-only ${isMasterAdminMode ? '' : 'hidden'}">
+                <!-- Master Admin Tools (Recálculo e Exclusão) -->
+                <div id="writer-tools" class="pt-8 space-y-4 writer-only ${isWriterMode ? '' : 'hidden'}">
+                    
+                    <h3 class="text-xl font-bold text-blue-400 border-b border-blue-400/50 pb-2">Ferramentas de Recálculo (Escritor/Admin Master)</h3>
+                    <p class="text-gray-400">Use este botão APÓS alterar os pontos de uma missão no Gerenciamento de Missões para atualizar o Rank de todos os Guardiões de forma retroativa.</p>
+                    <button onclick="window.recalculateAllRanks()" class="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 rounded-lg font-bold text-white text-lg transition duration-200">
+                        🔄 Recalcular Todos os Ranks Agora
+                    </button>
+                </div>
+                
+                <!-- Master Admin Tools (Exclusão) - APENAS ADMIN MASTER -->
+                <div id="admin-tools" class="pt-4 space-y-4 admin-only ${isMasterAdminMode ? '' : 'hidden'}">
                     <h3 class="text-xl font-bold text-red-500 border-b border-red-500/50 pb-2">Ferramentas de Exclusão (Admin Master)</h3>
-                    <p class="text-gray-400">Use com extrema cautela. A exclusão de logs é IRREVERSÍVEL e exige o reset do Rank.</p>
+                    <p class="text-gray-400">Use com extrema cautela. A exclusão de logs é IRREVERSÍVEL. A exclusão de relatórios ZERA os Ranks.</p>
                     <div class="flex flex-col sm:flex-row gap-4">
                         <button onclick="window.clearAuxiliaryLog()" class="w-full py-2 px-4 bg-red-700 hover:bg-red-800 rounded-lg font-bold text-white transition duration-200">
                             🛡️ Excluir Histórico de Auxílio
                         </button>
                         <button onclick="window.clearReportsLog()" class="w-full py-2 px-4 bg-red-700 hover:bg-red-800 rounded-lg font-bold text-white transition duration-200">
-                            ⚔️ Excluir Histórico de Relatórios (Reseta Ranks)
+                            ⚔️ Excluir Histórico de Relatórios (ZERA Ranks)
                         </button>
                     </div>
                 </div>
