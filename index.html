@@ -2279,7 +2279,7 @@
                 <!-- 5. CADASTRO: GUARDIÕES (MASTER ADMIN ONLY) -->
                 <section class="space-y-4 pt-8 pb-16">
                     <h2 class="text-3xl font-bold text-yellow-400 text-center">Cadastro: Guardiões (Membros da Organização)</h2>
-                    <p class="text-center text-gray-400">Pessoas que pontuam no Rank dos Guardiões. <span class="text-red-400">Master Admin Apenas.</span></p>
+                    <p class="text-center text-gray-400">Pessoas que pontuam no Rank dos Guardiões. <span class="text-red-400"></span></p>
 
                     <!-- Add New Ninja Form (ADMIN ONLY) -->
                     <div id="add-ninja-form" class="bg-gray-700 p-4 rounded-lg shadow-inner flex flex-col sm:flex-row gap-4 admin-only ${isMasterAdminMode ? '' : 'hidden'}">
@@ -2331,7 +2331,7 @@
                 <!-- 6. BANCO DE DADOS: MISSÕES E RANKS (MASTER ADMIN / WRITER MODE) -->
                 <section class="space-y-4 pt-8">
                     <h2 class="text-3xl font-bold text-green-400 text-center">Gerenciamento de Missões (Quests)</h2>
-                    <p class="text-center text-gray-400">Adicione, edite ou exclua as quests disponíveis. <span class="${isWriterMode ? 'text-green-400' : 'text-red-400'}">Requer Autorização de Escrita.</span></p>
+                    <p class="text-center text-gray-400">Adicione, edite ou exclua as quests disponíveis. <span class="${isWriterMode ? 'text-green-400' : 'text-red-400'}"></span></p>
                     
                     <!-- Add New Mission Form (WRITER ONLY) -->
                     <div id="add-mission-form" class="bg-gray-700 p-4 rounded-lg shadow-inner flex flex-col sm:flex-row gap-4 writer-only ${isWriterMode ? '' : 'hidden'}">
@@ -2375,3 +2375,4 @@
     </script>
 </body>
 </html>
+
